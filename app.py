@@ -85,7 +85,7 @@ def cargar_datos():
                 for ing in data.get("ingresos", []):
                     ing.setdefault("activo", True)
                 for inv in data.get("inversiones", []):
-                    inv.setdefault("activo", True)
+                    inv.setdefault("activo_inv", True)
                 if "ingresos" not in data and "ingresos_otros" in data:
                     data["ingresos"] = [{"concepto": i["concepto"], "monto": i["monto"], "activo": True} for i in data["ingresos_otros"]]
                 return data
@@ -176,7 +176,7 @@ dias = {0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves", 4: "viernes", 5: 
 meses = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
          7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
 nombre_dia = dias[ahora.weekday()]
-nombre_mes = meses[ahora.month()]
+nombre_mes = meses[ahora.month]
 fecha_hora_texto = f"Hoy es {nombre_dia} {ahora.day} de {nombre_mes} - {ahora.strftime('%H:%M')} hs"
 
 # Barra lateral
