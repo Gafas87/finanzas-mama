@@ -4,8 +4,7 @@ import plotly.express as px
 import requests
 import json
 import os
-from datetime import datetime
-import pytz
+from datetime import datetime, timezone, timedelta
 
 # Configuración de página
 st.set_page_config(page_title="Panel Financiero", layout="wide", page_icon="💜")
@@ -170,8 +169,8 @@ datos = cargar_datos()
 cotizaciones = obtener_cotizaciones()
 dolar_b = cotizaciones["dolar_blue"]
 
-# Formateo de fecha y hora local de Argentina
-tz_ar = pytz.timezone("America/Argentina/Buenos_Aires")
+# Formateo de fecha y hora local de Argentina (UTC-3 sin librerías externas)
+tz_ar = timezone(timedelta(hours=-3))
 ahora = datetime.now(tz_ar)
 dias = {0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves", 4: "viernes", 5: "sábado", 6: "domingo"}
 meses = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
@@ -408,7 +407,6 @@ with pestana1:
             fig_c.update_layout(height=430, margin=dict(t=20, b=20, l=10, r=10), showlegend=False)
             st.plotly_chart(fig_c, use_container_width=True)
 
-            # Tabla descriptiva debajo del pie chart
             tabla_c = df_pie_c[["categoria", "monto", "Porcentaje"]].copy()
             tabla_c.columns = ["Categoría", "Monto Mensual", "% Total"]
             tabla_c["Monto Mensual"] = tabla_c["Monto Mensual"].apply(lambda x: f"${x:,.0f}")
@@ -431,7 +429,6 @@ with pestana1:
             fig_i.update_layout(height=430, margin=dict(t=20, b=20, l=10, r=10), showlegend=False)
             st.plotly_chart(fig_i, use_container_width=True)
 
-            # Tabla descriptiva debajo del pie chart
             tabla_i = df_pie_i[["concepto", "monto", "Porcentaje"]].copy()
             tabla_i.columns = ["Concepto", "Monto Mensual", "% Total"]
             tabla_i["Monto Mensual"] = tabla_i["Monto Mensual"].apply(lambda x: f"${x:,.0f}")
@@ -493,7 +490,6 @@ with pestana2:
     total_patrimonio_ars = df_inv_activos["Valor en ARS"].sum() if not df_inv_activos.empty else 0
     total_patrimonio_usd = df_inv_activos["Valor en USD"].sum() if not df_inv_activos.empty else 0
 
-    # Tarjetas KPI de Patrimonio
     col_pat1, col_pat2 = st.columns(2)
     with col_pat1:
         st.markdown(f"""
@@ -514,7 +510,6 @@ with pestana2:
 
     st.markdown("---")
 
-    # Gráfico Pie Chart de Activos Activos
     if not df_inv_activos.empty:
         col_pie_inv, col_tbl_inv = st.columns([1.2, 1.8])
         with col_pie_inv:
@@ -538,7 +533,6 @@ with pestana2:
 
     st.markdown("---")
 
-    # GESTIÓN UNIFICADA: AGREGAR A LA IZQUIERDA Y EDITAR/PAUSAR A LA DERECHA
     col_inv_izq, col_inv_der = st.columns([1.1, 1.9])
 
     with col_inv_izq:
