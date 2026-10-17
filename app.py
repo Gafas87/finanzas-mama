@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 import requests
 import json
 import os
@@ -9,12 +9,12 @@ from datetime import datetime, timezone, timedelta
 st.set_page_config(
     page_title="Panel Financiero",
     layout="wide",
-    page_icon="💜"
+    page_icon="🌿"
 )
 
 DATA_FILE = "datos_finanzas.json"
 
-# Paleta de colores pasteles mate bien diferenciados entre sí
+# Paleta pastel mate principal (capa superior de la torta)
 PALETA_PASTEL = [
     "#B8B5FF",  # Lila pastel
     "#FFD3B6",  # Durazno pastel
@@ -27,6 +27,84 @@ PALETA_PASTEL = [
     "#F6DFEB",  # Rosa pálido
     "#D4A5A5"   # Rosa viejo mate
 ]
+
+# Paleta más oscura para dar el espesor / relieve 3D debajo de cada porción
+PALETA_SOMBRA_3D = [
+    "#8E8AE6",
+    "#E5B293",
+    "#7EC4A7",
+    "#E08580",
+    "#79AEDF",
+    "#DFDF6C",
+    "#A88EB8",
+    "#72B8A5",
+    "#D4B8C7",
+    "#B07F7F"
+]
+
+
+# ----------------- FUNCIÓN GRÁFICO DE TORTA 3D -----------------
+def crear_torta_3d(df, col_valores, col_nombres):
+    valores = df[col_valores].tolist()
+    nombres = df[col_nombres].tolist()
+    n = len(valores)
+    separacion = [0.045] * n
+    colores_sup = [PALETA_PASTEL[i % len(PALETA_PASTEL)] for i in range(n)]
+    colores_inf = [PALETA_SOMBRA_3D[i % len(PALETA_SOMBRA_3D)] for i in range(n)]
+
+    fig = go.Figure()
+
+    # Capa inferior desplazada para crear el espesor 3D de cada porción
+    fig.add_trace(go.Pie(
+        labels=nombres,
+        values=valores,
+        hole=0.35,
+        pull=separacion,
+        sort=True,
+        direction="clockwise",
+        rotation=15,
+        domain={"x": [0.02, 0.98], "y": [0.0, 0.91]},
+        textinfo="none",
+        hoverinfo="skip",
+        showlegend=False,
+        marker=dict(
+            colors=colores_inf,
+            line=dict(color="#7F8C8D", width=1.5)
+        )
+    ))
+
+    # Capa superior principal con letras grandes y porciones separadas
+    fig.add_trace(go.Pie(
+        labels=nombres,
+        values=valores,
+        hole=0.35,
+        pull=separacion,
+        sort=True,
+        direction="clockwise",
+        rotation=15,
+        domain={"x": [0.02, 0.98], "y": [0.06, 0.97]},
+        textposition="inside",
+        textinfo="percent+label",
+        insidetextorientation="horizontal",
+        textfont=dict(
+            size=18,
+            color="#1F2937",
+            family="Arial, sans-serif"
+        ),
+        showlegend=False,
+        marker=dict(
+            colors=colores_sup,
+            line=dict(color="#FFFFFF", width=3)
+        )
+    ))
+
+    fig.update_layout(
+        height=470,
+        margin=dict(t=15, b=15, l=10, r=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)"
+    )
+    return fig
 
 
 # ----------------- GESTIÓN DE DATOS -----------------
@@ -181,13 +259,70 @@ def obtener_cotizaciones(simbolos_acciones, simbolos_cripto):
     return cotiz
 
 
-# ----------------- ESTILOS CSS PASTEL MATE Y ARREGLO DE ICONOS -----------------
+# ----------------- ESTILOS CSS GENERALES Y ANIMACIONES BOTÁNICAS -----------------
 st.markdown("""
 <style>
     html, body, [class*="css"], p, span, label, div {
         font-size: 16px;
         color: #374151;
     }
+
+    /* Animaciones de enredaderas y hojas para el login */
+    @keyframes mecerEnredadera {
+        0% { transform: rotate(-4deg) translateY(0px); }
+        50% { transform: rotate(4deg) translateY(4px); }
+        100% { transform: rotate(-4deg) translateY(0px); }
+    }
+    @keyframes flotarHoja {
+        0% { transform: translateY(0px) rotate(0deg); opacity: 0.85; }
+        50% { transform: translateY(-10px) rotate(8deg); opacity: 1; }
+        100% { transform: translateY(0px) rotate(0deg); opacity: 0.85; }
+    }
+    .enredadera-top {
+        text-align: center;
+        font-size: 2.3rem;
+        letter-spacing: 10px;
+        animation: mecerEnredadera 4s ease-in-out infinite;
+        margin-bottom: 5px;
+        user-select: none;
+    }
+    .hoja-flotante {
+        display: inline-block;
+        animation: flotarHoja 3.2s ease-in-out infinite;
+    }
+    .login-jardin {
+        background: linear-gradient(180deg, #F0FDF4 0%, #F5F3FF 100%);
+        border: 2px solid #A7F3D0;
+        border-radius: 22px;
+        padding: 25px 22px 15px 22px;
+        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.08);
+        text-align: center;
+        margin-bottom: 12px;
+    }
+
+    /* Solapas (Tabs) principales mucho más grandes y visibles */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 18px;
+        margin-bottom: 1rem;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 60px !important;
+        padding: 12px 30px !important;
+        background-color: #F3F4F6 !important;
+        border-radius: 14px 14px 0px 0px !important;
+        border: 1px solid #E5E7EB !important;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #F3E8FF !important;
+        border: 2px solid #C084FC !important;
+        border-bottom: 4px solid #7E22CE !important;
+    }
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+        font-size: 1.45rem !important;
+        font-weight: 800 !important;
+        color: #4A235A !important;
+    }
+
     /* Tarjetas KPI en gama pastel mate */
     .metric-card {
         padding: 1.35rem;
@@ -213,11 +348,11 @@ st.markdown("""
         border-left: 7px solid #B794F4;
         color: #4A235A;
     }
-    .metric-card-amarillo {
-        background-color: #FEF9E7;
-        border: 1px solid #F9E79F;
-        border-left: 7px solid #F4D03F;
-        color: #7D6608;
+    .metric-card-rojo-pastel {
+        background-color: #FADBD8;
+        border: 1px solid #F5B7B1;
+        border-left: 7px solid #EC7063;
+        color: #78281F;
     }
     .metric-card-neutro {
         background-color: #F3F4F6;
@@ -250,14 +385,9 @@ st.markdown("""
         margin-top: 0.45rem;
     }
 
-    /* Cambiar el tilde de naranja/rojo a VERDE cuando está activo */
-    div[data-testid="stCheckbox"] label[data-baseweb="checkbox"]:has(input:checked) > span:first-of-type,
-    div[data-testid="stCheckbox"] label[data-baseweb="checkbox"]:has(input[aria-checked="true"]) > span:first-of-type,
-    span[data-baseweb="checkbox"][aria-checked="true"] {
-        background-color: #52B788 !important;
-        border-color: #52B788 !important;
-    }
+    /* Tildes 100% VERDES cuando están activos */
     div[data-testid="stCheckbox"] {
+        filter: hue-rotate(125deg) saturate(0.85) brightness(0.95) !important;
         padding-top: 0.35rem;
     }
 
@@ -274,7 +404,7 @@ st.markdown("""
         -webkit-text-fill-color: #9CA3AF !important;
     }
 
-    /* Arreglo para que el ícono del basurerito se vea entero y nunca se corte */
+    /* Botón del basurerito completo y centrado */
     div[data-testid="stButton"] button {
         border-radius: 10px !important;
         border: 1px solid #D1D5DB !important;
@@ -296,16 +426,10 @@ st.markdown("""
         background-color: #FEE2E2 !important;
         border-color: #FCA5A5 !important;
     }
-
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 1.2rem;
-        font-weight: 700;
-        color: #5B4B8A;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- AUTENTICACIÓN -----------------
+# ----------------- AUTENTICACIÓN CON JARDÍN ANIMADO -----------------
 USUARIO_CORRECTO = "mama"
 PASSWORD_CORRECTO = "terapias123"
 
@@ -313,18 +437,31 @@ if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
-    st.markdown(
-        "<h2 style='text-align: center; color: #5B4B8A;'>"
-        "💜 Ingreso a Mi Panel Financiero</h2>",
-        unsafe_allow_html=True
-    )
-    c1, c2, c3 = st.columns([1, 1.4, 1])
+    c1, c2, c3 = st.columns([0.8, 1.6, 0.8])
     with c2:
+        st.markdown("""
+        <div class="enredadera-top">
+            🌿🍃🌱🪴🌸🪴🌱🍃🌿
+        </div>
+        <div class="login-jardin">
+            <div style="font-size: 2.2rem; margin-bottom: 4px;">
+                <span class="hoja-flotante">🌿</span>
+                <span style="color: #2E7D32; font-weight: 800; font-size: 1.7rem;">
+                    Mi Jardín Financiero
+                </span>
+                <span class="hoja-flotante">🌿</span>
+            </div>
+            <p style="color: #4B5563; margin-top: 0px; font-size: 1.05rem;">
+                Bienvenida a tu espacio de tranquilidad y organización 🌱
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
         with st.form("login_form"):
-            user = st.text_input("Usuario")
-            password = st.text_input("Contraseña", type="password")
+            user = st.text_input("🌱 Usuario")
+            password = st.text_input("🌸 Contraseña", type="password")
             submit = st.form_submit_button(
-                "Ingresar",
+                "🍃 Ingresar a Mi Panel 🍃",
                 use_container_width=True
             )
             if submit:
@@ -335,6 +472,12 @@ if not st.session_state.autenticado:
                     st.rerun()
                 else:
                     st.error("Usuario o contraseña incorrectos.")
+
+        st.markdown("""
+        <div class="enredadera-top" style="font-size: 1.8rem; margin-top: 8px;">
+            🍃🌱🌺🌿🪴🌿🌺🌱🍃
+        </div>
+        """, unsafe_allow_html=True)
     st.stop()
 
 # ----------------- CARGA DE DATOS -----------------
@@ -354,7 +497,7 @@ tickers_cri = [
 cotizaciones = obtener_cotizaciones(tuple(tickers_acc), tuple(tickers_cri))
 dolar_b = cotizaciones["dolar_blue"]
 
-# ----------------- FECHA Y BARRA LATERAL LIMPIA -----------------
+# ----------------- FECHA Y BARRA LATERAL -----------------
 tz_ar = timezone(timedelta(hours=-3))
 ahora = datetime.now(tz_ar)
 dias = {
@@ -373,7 +516,7 @@ fecha_hora_texto = f"Hoy es {dia_str} {ahora.day} de {mes_str} - {hora_str} hs"
 
 with st.sidebar:
     st.markdown(
-        "<h2 style='color: #5B4B8A;'>🌿 Mi Panel</h2>",
+        "<h2 style='color: #2E7D32;'>🌿 Mi Panel</h2>",
         unsafe_allow_html=True
     )
     st.markdown(f"🗓️ **{fecha_hora_texto}**")
@@ -416,11 +559,11 @@ with pestana1:
         carita = "😐"
         sub_saldo = "Resultado neutro (Sin ganancia ni pérdida)"
     else:
-        clase_saldo = "metric-card-amarillo"
+        clase_saldo = "metric-card-rojo-pastel"
         carita = "😟"
         sub_saldo = "Resultado negativo (Pérdida del mes)"
 
-    # 1. TARJETAS KPI SUPERIORES EN COLORES PASTELES MATE
+    # 1. TARJETAS KPI SUPERIORES
     col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
     with col_kpi1:
         st.markdown(f"""
@@ -452,7 +595,7 @@ with pestana1:
         </div>
         """, unsafe_allow_html=True)
 
-    # 2. CALCULADORA UNIFICADA DE TERAPIAS (SIN COMENTARIOS EXTRA)
+    # 2. CALCULADORA UNIFICADA DE TERAPIAS
     titulo_exp = "🧘‍♀️ **Calculadora de Terapias: Sesiones necesarias según tus números activos**"
     with st.expander(titulo_exp, expanded=True):
         col_c1, col_c2 = st.columns([1.1, 2.5])
@@ -497,7 +640,7 @@ with pestana1:
 
     st.markdown("---")
 
-    # 3. COLUMNAS DE COSTOS E INGRESOS CON AMPLIA SEPARACIÓN EN EL MEDIO
+    # 3. COLUMNAS DE COSTOS E INGRESOS CON AMPLIA SEPARACIÓN
     col_izq, col_espacio, col_der = st.columns([1, 0.16, 1])
 
     with col_izq:
@@ -620,9 +763,9 @@ with pestana1:
 
     st.markdown("---")
 
-    # 4. GRÁFICOS DE TORTA CON PORCIONES EN DISTINTOS COLORES PASTELES
+    # 4. GRÁFICOS DE TORTA 3D CON PORCIONES SEPARADAS
     st.markdown(
-        "<h3 style='color: #5B4B8A;'>📊 Gráficos y Porcentajes Discriminados</h3>",
+        "<h3 style='color: #5B4B8A;'>📊 Gráficos 3D y Porcentajes Discriminados</h3>",
         unsafe_allow_html=True
     )
     col_chart_c, col_esp_g, col_chart_i = st.columns([1, 0.1, 1])
@@ -637,23 +780,7 @@ with pestana1:
             df_pie_c["USD"] = df_pie_c["monto"] / dolar_b
             df_pie_c["Porcentaje"] = (df_pie_c["monto"] / total_costos) * 100
 
-            fig_c = px.pie(
-                df_pie_c,
-                values="monto",
-                names="categoria",
-                hole=0.42,
-                color_discrete_sequence=PALETA_PASTEL
-            )
-            fig_c.update_traces(
-                textposition='inside',
-                textinfo='percent+label',
-                textfont_size=15
-            )
-            fig_c.update_layout(
-                height=440,
-                margin=dict(t=20, b=20, l=10, r=10),
-                showlegend=False
-            )
+            fig_c = crear_torta_3d(df_pie_c, "monto", "categoria")
             st.plotly_chart(fig_c, use_container_width=True)
 
             tabla_c = df_pie_c[["categoria", "monto", "USD", "Porcentaje"]].copy()
@@ -675,23 +802,7 @@ with pestana1:
             df_pie_i["USD"] = df_pie_i["monto"] / dolar_b
             df_pie_i["Porcentaje"] = (df_pie_i["monto"] / total_ingresos) * 100
 
-            fig_i = px.pie(
-                df_pie_i,
-                values="monto",
-                names="concepto",
-                hole=0.42,
-                color_discrete_sequence=PALETA_PASTEL
-            )
-            fig_i.update_traces(
-                textposition='inside',
-                textinfo='percent+label',
-                textfont_size=15
-            )
-            fig_i.update_layout(
-                height=440,
-                margin=dict(t=20, b=20, l=10, r=10),
-                showlegend=False
-            )
+            fig_i = crear_torta_3d(df_pie_i, "monto", "concepto")
             st.plotly_chart(fig_i, use_container_width=True)
 
             tabla_i = df_pie_i[["concepto", "monto", "USD", "Porcentaje"]].copy()
@@ -757,7 +868,7 @@ with pestana2:
     total_patrimonio_ars = df_inv_activos["Valor en ARS"].sum() if not df_inv_activos.empty else 0
     total_patrimonio_usd = df_inv_activos["Valor en USD"].sum() if not df_inv_activos.empty else 0
 
-    # TARJETA ÚNICA DE PATRIMONIO TOTAL EN LILA PASTEL MATE (SIN ICONO DE BILLETE)
+    # TARJETA ÚNICA DE PATRIMONIO TOTAL EN LILA PASTEL MATE
     st.markdown(f"""
     <div class="metric-card metric-card-lila" style="text-align: center;">
         <div class="kpi-title" style="font-size: 1.25rem;">Patrimonio Total</div>
@@ -927,9 +1038,9 @@ with pestana2:
 
     st.markdown("---")
 
-    # GRÁFICOS PIE CHART DE INVERSIONES CON TABLAS DEBAJO
+    # GRÁFICOS DE TORTA 3D DE INVERSIONES CON TABLAS DEBAJO
     st.markdown(
-        "<h3 style='color: #5B4B8A;'>📊 Distribución Detallada de Mi Cartera</h3>",
+        "<h3 style='color: #5B4B8A;'>📊 Distribución 3D Detallada de Mi Cartera</h3>",
         unsafe_allow_html=True
     )
     if not df_inv_activos.empty and total_patrimonio_ars > 0:
@@ -946,23 +1057,7 @@ with pestana2:
             }).sort_values(by="Valor en ARS", ascending=False)
             resumen_tipo["%"] = (resumen_tipo["Valor en ARS"] / total_patrimonio_ars) * 100
 
-            fig_inv_tipo = px.pie(
-                resumen_tipo,
-                values="Valor en ARS",
-                names="Tipo",
-                hole=0.42,
-                color_discrete_sequence=PALETA_PASTEL
-            )
-            fig_inv_tipo.update_traces(
-                textposition='inside',
-                textinfo='percent+label',
-                textfont_size=15
-            )
-            fig_inv_tipo.update_layout(
-                height=440,
-                margin=dict(t=20, b=20, l=10, r=10),
-                showlegend=False
-            )
+            fig_inv_tipo = crear_torta_3d(resumen_tipo, "Valor en ARS", "Tipo")
             st.plotly_chart(fig_inv_tipo, use_container_width=True)
 
             tabla_t = resumen_tipo.copy()
@@ -980,23 +1075,7 @@ with pestana2:
             df_det["Etiqueta"] = df_det["Activo"] + " (" + df_det["Plataforma"] + ")"
             df_det["%"] = (df_det["Valor en ARS"] / total_patrimonio_ars) * 100
 
-            fig_inv_det = px.pie(
-                df_det,
-                values="Valor en ARS",
-                names="Etiqueta",
-                hole=0.42,
-                color_discrete_sequence=PALETA_PASTEL
-            )
-            fig_inv_det.update_traces(
-                textposition='inside',
-                textinfo='percent+label',
-                textfont_size=15
-            )
-            fig_inv_det.update_layout(
-                height=440,
-                margin=dict(t=20, b=20, l=10, r=10),
-                showlegend=False
-            )
+            fig_inv_det = crear_torta_3d(df_det, "Valor en ARS", "Etiqueta")
             st.plotly_chart(fig_inv_det, use_container_width=True)
 
             cols_d = [
