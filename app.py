@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.graph_objects as go
 import requests
@@ -7,180 +8,266 @@ import os
 from datetime import datetime, timezone, timedelta
 
 st.set_page_config(
-    page_title="Panel Financiero",
+    page_title="Jardín Financiero",
     layout="wide",
     page_icon="🌿"
 )
 
 DATA_FILE = "datos_finanzas.json"
 
-# Paleta pastel mate principal (capa superior de la torta)
+# Paleta de colores pasteles mate bien diferenciados para que cada porción contraste
 PALETA_PASTEL = [
-    "#B8B5FF",  # Lila pastel
-    "#FFD3B6",  # Durazno pastel
-    "#A8E6CF",  # Verde menta pastel
-    "#FFAAA5",  # Coral rosado pastel
-    "#A2D2FF",  # Celeste pastel
-    "#FDFD96",  # Amarillo pastel suave
-    "#CDB4DB",  # Lavanda mate
-    "#98DDCA",  # Turquesa pastel
-    "#F6DFEB",  # Rosa pálido
-    "#D4A5A5"   # Rosa viejo mate
-]
-
-# Paleta más oscura para dar el espesor / relieve 3D debajo de cada porción
-PALETA_SOMBRA_3D = [
-    "#8E8AE6",
-    "#E5B293",
-    "#7EC4A7",
-    "#E08580",
-    "#79AEDF",
-    "#DFDF6C",
-    "#A88EB8",
-    "#72B8A5",
-    "#D4B8C7",
-    "#B07F7F"
+    "#9B89B3",  # Lila ciruela pastel
+    "#F6A682",  # Coral durazno pastel
+    "#76C893",  # Verde menta vivo pastel
+    "#72B0E8",  # Azul cielo pastel
+    "#F4D06F",  # Amarillo cálido pastel
+    "#E58F9E",  # Rosa antiguo pastel
+    "#64C2C7",  # Turquesa pastel
+    "#C3A6A0",  # Visón / Taupe suave
+    "#A3C9A8",  # Verde salvia pastel
+    "#D99B66",  # Terracota suave
+    "#8E9AAF",  # Azul pizarra pastel
+    "#E2AFCF"   # Orquídea pastel
 ]
 
 
-# ----------------- FUNCIÓN GRÁFICO DE TORTA 3D -----------------
-def crear_torta_3d(df, col_valores, col_nombres):
+# ----------------- NAVEGACIÓN CON FLECHAS DEL TECLADO -----------------
+def activar_navegacion_flechas():
+    js_code = """
+    <script>
+    const doc = window.parent.document;
+    if (!doc.flechasNavegacionActivas) {
+        doc.addEventListener('keydown', function(e) {
+            const active = doc.activeElement;
+            if (!active || active.tagName !== 'INPUT') return;
+
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                const inputs = Array.from(
+                    doc.querySelectorAll(
+                        'input:not([disabled]):not([type="hidden"]):not([type="checkbox"])'
+                    )
+                ).filter(el => el.offsetParent !== null);
+
+                const idx = inputs.indexOf(active);
+                if (idx !== -1) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const nextIdx = e.key === 'ArrowDown' ? idx + 1 : idx - 1;
+                    if (nextIdx >= 0 && nextIdx < inputs.length) {
+                        inputs[nextIdx].focus();
+                        if (inputs[nextIdx].select) {
+                            inputs[nextIdx].select();
+                        }
+                    }
+                }
+            }
+        }, true);
+        doc.flechasNavegacionActivas = true;
+    }
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
+
+
+# ----------------- FUNCIÓN GRÁFICO DE TORTA 2D CON FLECHAS EXTERNAS -----------------
+def crear_torta_2d(df, col_valores, col_nombres):
     valores = df[col_valores].tolist()
     nombres = df[col_nombres].tolist()
+    total = sum(valores) if sum(valores) > 0 else 1.0
     n = len(valores)
-    separacion = [0.045] * n
-    colores_sup = [PALETA_PASTEL[i % len(PALETA_PASTEL)] for i in range(n)]
-    colores_inf = [PALETA_SOMBRA_3D[i % len(PALETA_SOMBRA_3D)] for i in range(n)]
 
-    fig = go.Figure()
+    colores = [PALETA_PASTEL[i % len(PALETA_PASTEL)] for i in range(n)]
 
-    # Capa inferior desplazada para crear el espesor 3D de cada porción
-    fig.add_trace(go.Pie(
+    # Si la porción es menor al 9%, saca el texto afuera con línea guía para que no se achique
+    posiciones = [
+        "outside" if (v / total) < 0.09 else "inside"
+        for v in valores
+    ]
+
+    fig = go.Figure(data=[go.Pie(
         labels=nombres,
         values=valores,
-        hole=0.35,
-        pull=separacion,
+        hole=0.38,
         sort=True,
         direction="clockwise",
-        rotation=15,
-        domain={"x": [0.02, 0.98], "y": [0.0, 0.91]},
-        textinfo="none",
-        hoverinfo="skip",
-        showlegend=False,
-        marker=dict(
-            colors=colores_inf,
-            line=dict(color="#7F8C8D", width=1.5)
-        )
-    ))
-
-    # Capa superior principal con letras grandes y porciones separadas
-    fig.add_trace(go.Pie(
-        labels=nombres,
-        values=valores,
-        hole=0.35,
-        pull=separacion,
-        sort=True,
-        direction="clockwise",
-        rotation=15,
-        domain={"x": [0.02, 0.98], "y": [0.06, 0.97]},
-        textposition="inside",
-        textinfo="percent+label",
+        textposition=posiciones,
+        textinfo="label+percent",
         insidetextorientation="horizontal",
+        pull=[0.015] * n,
+        automargin=True,
         textfont=dict(
-            size=18,
+            size=15,
             color="#1F2937",
             family="Arial, sans-serif"
         ),
-        showlegend=False,
+        insidetextfont=dict(
+            size=15,
+            color="#1F2937",
+            family="Arial, sans-serif"
+        ),
+        outsidetextfont=dict(
+            size=15,
+            color="#1F2937",
+            family="Arial, sans-serif"
+        ),
         marker=dict(
-            colors=colores_sup,
-            line=dict(color="#FFFFFF", width=3)
-        )
-    ))
+            colors=colores,
+            line=dict(color="#FFFFFF", width=2.5)
+        ),
+        showlegend=False
+    )])
 
+    # uniformtext con mode='show' garantiza que TODAS las letras tengan exactamente el mismo tamaño
     fig.update_layout(
-        height=470,
-        margin=dict(t=15, b=15, l=10, r=10),
+        uniformtext=dict(minsize=15, mode="show"),
+        height=450,
+        margin=dict(t=45, b=45, l=45, r=45),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)"
     )
     return fig
 
 
-# ----------------- GESTIÓN DE DATOS -----------------
+def formatear_cant(valor):
+    try:
+        num = float(valor)
+        if num.is_integer():
+            return str(int(num))
+        return f"{num:.6f}".rstrip("0").rstrip(".")
+    except Exception:
+        return str(valor)
+
+
+def clasificar_costo_existente(nombre):
+    n = nombre.upper().strip()
+    if any(k in n for k in ["INMOBILIARIO", "CISI", "COSI", "AUTOMOTOR", "IMPUESTO", "MONOTRIBUTO"]):
+        return "Impuestos"
+    if any(k in n for k in ["SAT", "EDET", "GAS", "CLARO", "LUZ", "AGUA", "INTERNET", "SERVICIO"]):
+        return "Servicios"
+    if any(k in n for k in ["NETFLIX", "DISNEY", "SPOTIFY", "FLOW", "YOUTUBE"]):
+        return "Suscripciones"
+    if any(k in n for k in ["NAFTA", "SEGURO", "AUTO", "PATENTE", "COCHERA"]):
+        return "Vehículo y Movilidad"
+    if any(k in n for k in ["GABINETE", "INSUMO", "CONSULTORIO"]):
+        return "Gabinete"
+    return "Hogar y Otros"
+
+
+# ----------------- GESTIÓN Y MIGRACIÓN DE DATOS -----------------
 def cargar_datos():
+    criptos_base = ["BTC", "ETH", "USDT", "SOL", "BNB", "ADA", "XRP", "DOT", "DOGE"]
+    acciones_base = [
+        "AAPL (Apple)", "KO (Coca-Cola)", "MELI (MercadoLibre)",
+        "SPY (S&P 500)", "MSFT (Microsoft)", "GOOGL (Google)",
+        "NVDA (Nvidia)", "TSLA (Tesla)", "AMZN (Amazon)", "YPFD (YPF)"
+    ]
+
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+
                 for c in data.get("costos", []):
                     c.setdefault("activo", True)
+                    if "grupo" not in c or not c["grupo"]:
+                        c["grupo"] = clasificar_costo_existente(c.get("categoria", ""))
+
                 for ing in data.get("ingresos", []):
                     ing.setdefault("activo", True)
+                    if "grupo" not in ing or not ing["grupo"]:
+                        nom_low = ing.get("concepto", "").lower()
+                        if "farmacia" in nom_low or "sac" in nom_low:
+                            ing["grupo"] = "Farmacia"
+                        elif "jubil" in nom_low:
+                            ing["grupo"] = "Jubilación"
+                        else:
+                            ing["grupo"] = "Otros Ingresos"
+
+                cats_base_c = ["Impuestos", "Servicios", "Suscripciones", "Vehículo y Movilidad", "Hogar y Otros", "Gabinete"]
+                cats_c = list(dict.fromkeys(
+                    data.get("categorias_costos", cats_base_c)
+                    + [c["grupo"] for c in data.get("costos", [])]
+                ))
+                data["categorias_costos"] = cats_c
+
+                cats_base_i = ["Farmacia", "Jubilación", "Terapias"]
+                cats_i = list(dict.fromkeys(
+                    data.get("categorias_ingresos", cats_base_i)
+                    + [i["grupo"] for i in data.get("ingresos", [])]
+                ))
+                data["categorias_ingresos"] = cats_i
+
                 for inv in data.get("inversiones", []):
                     inv.setdefault("activo_inv", True)
                     if inv.get("tipo") == "Acciones / CEDEARs":
                         inv["tipo"] = "Acciones"
                     elif inv.get("tipo") == "Efectivo / Banco":
                         inv["tipo"] = "Pesos ARS"
-                if "ingresos" not in data and "ingresos_otros" in data:
-                    data["ingresos"] = [
-                        {
-                            "concepto": i["concepto"],
-                            "monto": i["monto"],
-                            "activo": True
-                        }
-                        for i in data["ingresos_otros"]
-                    ]
+
+                criptos_actuales = data.get("criptos_guardadas", criptos_base)
+                for inv in data.get("inversiones", []):
+                    if inv.get("tipo") == "Criptomonedas":
+                        sim = inv.get("simbolo", "").upper().strip()
+                        if sim and sim not in criptos_actuales:
+                            criptos_actuales.append(sim)
+                data["criptos_guardadas"] = criptos_actuales
+
+                acciones_actuales = data.get("acciones_guardadas", acciones_base)
+                data["acciones_guardadas"] = acciones_actuales
                 return data
         except Exception:
             pass
 
     return {
+        "categorias_costos": [
+            "Impuestos",
+            "Servicios",
+            "Suscripciones",
+            "Vehículo y Movilidad",
+            "Hogar y Otros"
+        ],
         "costos": [
-            {"categoria": "Alquiler / Expensas", "monto": 250000, "activo": True},
-            {"categoria": "Supermercado y Comida", "monto": 280000, "activo": True},
-            {"categoria": "Obra Social / Salud", "monto": 90000, "activo": True},
-            {"categoria": "Servicios (Luz, Gas, Agua)", "monto": 75000, "activo": True},
-            {"categoria": "Insumos Gabinete", "monto": 45000, "activo": True}
+            {"grupo": "Impuestos", "categoria": "INMOBILIARIO", "monto": 2462, "activo": True},
+            {"grupo": "Impuestos", "categoria": "CISI", "monto": 2659, "activo": True},
+            {"grupo": "Impuestos", "categoria": "AUTOMOTOR", "monto": 2667, "activo": True},
+            {"grupo": "Servicios", "categoria": "SAT", "monto": 36000, "activo": True},
+            {"grupo": "Servicios", "categoria": "EDET", "monto": 60000, "activo": True},
+            {"grupo": "Servicios", "categoria": "GAS", "monto": 16000, "activo": True},
+            {"grupo": "Servicios", "categoria": "CLARO + RECARGA", "monto": 29000, "activo": True},
+            {"grupo": "Suscripciones", "categoria": "NETFLIX", "monto": 15000, "activo": True},
+            {"grupo": "Suscripciones", "categoria": "DISNEY", "monto": 9000, "activo": True},
+            {"grupo": "Vehículo y Movilidad", "categoria": "NAFTA", "monto": 86000, "activo": True},
+            {"grupo": "Vehículo y Movilidad", "categoria": "SEGURO", "monto": 28000, "activo": True}
+        ],
+        "categorias_ingresos": [
+            "Farmacia",
+            "Jubilación",
+            "Terapias"
         ],
         "ingresos": [
-            {"concepto": "Sueldo Farmacia", "monto": 650000, "activo": True},
-            {"concepto": "SAC (Aguinaldo proporcional)", "monto": 54000, "activo": True},
-            {"concepto": "Jubilación", "monto": 320000, "activo": True}
+            {"grupo": "Farmacia", "concepto": "Sueldo Farmacia", "monto": 650000, "activo": True},
+            {"grupo": "Farmacia", "concepto": "SAC (Aguinaldo proporcional)", "monto": 54000, "activo": True},
+            {"grupo": "Jubilación", "concepto": "Jubilación", "monto": 320000, "activo": True}
         ],
         "precio_terapia": 30000,
+        "criptos_guardadas": criptos_base,
+        "acciones_guardadas": acciones_base,
         "inversiones": [
-            {
-                "tipo": "Dólar Billete",
-                "activo": "Dólar Billete",
-                "simbolo": "USD",
-                "cantidad": 1200,
-                "plataforma": "Caja de seguridad",
-                "activo_inv": True
-            },
-            {
-                "tipo": "Acciones",
-                "activo": "AAPL (Apple)",
-                "simbolo": "AAPL",
-                "cantidad": 20,
-                "plataforma": "Balanz",
-                "activo_inv": True
-            },
             {
                 "tipo": "Criptomonedas",
                 "activo": "BTC",
                 "simbolo": "BTC",
-                "cantidad": 0.015,
-                "plataforma": "Binance",
+                "cantidad": 0.5,
+                "plataforma": "BINANCE",
                 "activo_inv": True
             },
             {
-                "tipo": "Pesos ARS",
-                "activo": "Pesos ARS",
+                "tipo": "Otros",
+                "activo": "FRASCO NX",
                 "simbolo": "ARS",
-                "cantidad": 350000,
-                "plataforma": "Banco",
+                "cantidad": 100000,
+                "plataforma": "NX APP",
                 "activo_inv": True
             }
         ]
@@ -202,6 +289,10 @@ def obtener_cotizaciones(simbolos_acciones, simbolos_cripto):
         "USDT": 1.0,
         "SOL": 150.0,
         "BNB": 580.0,
+        "ADA": 0.75,
+        "XRP": 1.10,
+        "DOT": 6.50,
+        "DOGE": 0.22,
         "AAPL": 230.0,
         "KO": 68.0,
         "MELI": 2050.0,
@@ -225,21 +316,24 @@ def obtener_cotizaciones(simbolos_acciones, simbolos_cripto):
 
     lista_c = set(["BTC", "ETH", "SOL", "BNB"] + list(simbolos_cripto))
     for cripto in lista_c:
-        if cripto == "USDT":
-            cotiz["USDT"] = 1.0
+        c_up = cripto.upper().strip()
+        if not c_up:
+            continue
+        if c_up in ["USDT", "USDC", "DAI"]:
+            cotiz[c_up] = 1.0
             continue
         try:
-            par = f"{cripto.upper()}USDT"
+            par = f"{c_up}USDT"
             url_bin = f"https://api.binance.com/api/v3/ticker/price?symbol={par}"
             r_bin = requests.get(url_bin, timeout=3)
             if r_bin.status_code == 200:
-                cotiz[cripto.upper()] = float(r_bin.json()["price"])
+                cotiz[c_up] = float(r_bin.json()["price"])
         except Exception:
             pass
 
     headers = {"User-Agent": "Mozilla/5.0"}
     for ticker in set(simbolos_acciones):
-        t_clean = ticker.upper().strip()
+        t_clean = ticker.upper().strip().split(" ")[0]
         if not t_clean or t_clean in ["USD", "ARS"]:
             continue
         try:
@@ -259,7 +353,7 @@ def obtener_cotizaciones(simbolos_acciones, simbolos_cripto):
     return cotiz
 
 
-# ----------------- ESTILOS CSS GENERALES Y ANIMACIONES BOTÁNICAS -----------------
+# ----------------- ESTILOS CSS PASTEL MATE -----------------
 st.markdown("""
 <style>
     html, body, [class*="css"], p, span, label, div {
@@ -267,40 +361,31 @@ st.markdown("""
         color: #374151;
     }
 
-    /* Animaciones de enredaderas y hojas para el login */
-    @keyframes mecerEnredadera {
-        0% { transform: rotate(-4deg) translateY(0px); }
-        50% { transform: rotate(4deg) translateY(4px); }
-        100% { transform: rotate(-4deg) translateY(0px); }
-    }
-    @keyframes flotarHoja {
-        0% { transform: translateY(0px) rotate(0deg); opacity: 0.85; }
-        50% { transform: translateY(-10px) rotate(8deg); opacity: 1; }
-        100% { transform: translateY(0px) rotate(0deg); opacity: 0.85; }
-    }
-    .enredadera-top {
-        text-align: center;
-        font-size: 2.3rem;
-        letter-spacing: 10px;
-        animation: mecerEnredadera 4s ease-in-out infinite;
-        margin-bottom: 5px;
-        user-select: none;
-    }
-    .hoja-flotante {
-        display: inline-block;
-        animation: flotarHoja 3.2s ease-in-out infinite;
-    }
-    .login-jardin {
-        background: linear-gradient(180deg, #F0FDF4 0%, #F5F3FF 100%);
-        border: 2px solid #A7F3D0;
+    /* Portada Jardín Financiero (Limpia, estética y fija) */
+    .jardin-login-box {
+        background: linear-gradient(145deg, #EAF6EE 0%, #F5F0FF 100%);
+        border: 2px solid #95D5B2;
         border-radius: 22px;
-        padding: 25px 22px 15px 22px;
-        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.08);
+        padding: 30px 26px 20px 26px;
+        box-shadow: 0 8px 20px rgba(45, 106, 79, 0.08);
         text-align: center;
-        margin-bottom: 12px;
+        margin-top: 25px;
+        margin-bottom: 16px;
+    }
+    .jardin-login-title {
+        color: #1B4332;
+        font-weight: 800;
+        font-size: 1.9rem;
+        margin: 10px 0 6px 0;
+    }
+    .jardin-login-sub {
+        color: #40916C;
+        font-size: 1.05rem;
+        font-weight: 500;
+        margin-bottom: 4px;
     }
 
-    /* Solapas (Tabs) principales mucho más grandes y visibles */
+    /* Solapas principales grandes y visibles */
     .stTabs [data-baseweb="tab-list"] {
         gap: 18px;
         margin-bottom: 1rem;
@@ -385,13 +470,25 @@ st.markdown("""
         margin-top: 0.45rem;
     }
 
+    /* Encabezados de columnas en tablas editables */
+    .col-header {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #4B5563;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        padding-bottom: 4px;
+        border-bottom: 2px solid #D1D5DB;
+        margin-bottom: 8px;
+    }
+
     /* Tildes 100% VERDES cuando están activos */
     div[data-testid="stCheckbox"] {
         filter: hue-rotate(125deg) saturate(0.85) brightness(0.95) !important;
         padding-top: 0.35rem;
     }
 
-    /* Poner todo el renglón en GRIS cuando está desactivado/pausado */
+    /* Renglones desactivados en GRIS */
     div[data-testid="stTextInput"]:has(input:disabled) > div,
     div[data-testid="stNumberInput"]:has(input:disabled) > div {
         background-color: #E5E7EB !important;
@@ -429,7 +526,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- AUTENTICACIÓN CON JARDÍN ANIMADO -----------------
+# Activar navegación con flechas Arriba / Abajo del teclado
+activar_navegacion_flechas()
+
+# ----------------- AUTENTICACIÓN: ENTRÁ A TU JARDÍN FINANCIERO -----------------
 USUARIO_CORRECTO = "mama"
 PASSWORD_CORRECTO = "terapias123"
 
@@ -437,31 +537,26 @@ if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
-    c1, c2, c3 = st.columns([0.8, 1.6, 0.8])
+    c1, c2, c3 = st.columns([1, 1.35, 1])
     with c2:
         st.markdown("""
-        <div class="enredadera-top">
-            🌿🍃🌱🪴🌸🪴🌱🍃🌿
-        </div>
-        <div class="login-jardin">
-            <div style="font-size: 2.2rem; margin-bottom: 4px;">
-                <span class="hoja-flotante">🌿</span>
-                <span style="color: #2E7D32; font-weight: 800; font-size: 1.7rem;">
-                    Mi Jardín Financiero
-                </span>
-                <span class="hoja-flotante">🌿</span>
-            </div>
-            <p style="color: #4B5563; margin-top: 0px; font-size: 1.05rem;">
-                Bienvenida a tu espacio de tranquilidad y organización 🌱
-            </p>
+        <div class="jardin-login-box">
+            <svg width="80" height="54" viewBox="0 0 80 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M40 50V18" stroke="#2D6A4F" stroke-width="3" stroke-linecap="round"/>
+                <path d="M40 36C26 36 16 26 16 12C30 12 40 22 40 36Z" fill="#74C69D" stroke="#2D6A4F" stroke-width="2.2"/>
+                <path d="M40 28C54 28 64 18 64 4C50 4 40 14 40 28Z" fill="#95D5B2" stroke="#2D6A4F" stroke-width="2.2"/>
+                <circle cx="40" cy="12" r="4" fill="#D8B4FE" stroke="#5B4B8A" stroke-width="1.5"/>
+            </svg>
+            <div class="jardin-login-title">Entrá a tu Jardín Financiero</div>
+            <div class="jardin-login-sub">Tu espacio personal de claridad y organización</div>
         </div>
         """, unsafe_allow_html=True)
 
         with st.form("login_form"):
-            user = st.text_input("🌱 Usuario")
-            password = st.text_input("🌸 Contraseña", type="password")
+            user = st.text_input("Usuario")
+            password = st.text_input("Contraseña", type="password")
             submit = st.form_submit_button(
-                "🍃 Ingresar a Mi Panel 🍃",
+                "Ingresar",
                 use_container_width=True
             )
             if submit:
@@ -472,12 +567,6 @@ if not st.session_state.autenticado:
                     st.rerun()
                 else:
                     st.error("Usuario o contraseña incorrectos.")
-
-        st.markdown("""
-        <div class="enredadera-top" style="font-size: 1.8rem; margin-top: 8px;">
-            🍃🌱🌺🌿🪴🌿🌺🌱🍃
-        </div>
-        """, unsafe_allow_html=True)
     st.stop()
 
 # ----------------- CARGA DE DATOS -----------------
@@ -487,12 +576,13 @@ tickers_acc = [
     inv.get("simbolo", "AAPL")
     for inv in datos.get("inversiones", [])
     if inv.get("tipo") == "Acciones"
-]
+] + [a.split(" ")[0] for a in datos.get("acciones_guardadas", [])]
+
 tickers_cri = [
     inv.get("simbolo", "BTC")
     for inv in datos.get("inversiones", [])
     if inv.get("tipo") == "Criptomonedas"
-]
+] + datos.get("criptos_guardadas", [])
 
 cotizaciones = obtener_cotizaciones(tuple(tickers_acc), tuple(tickers_cri))
 dolar_b = cotizaciones["dolar_blue"]
@@ -516,7 +606,7 @@ fecha_hora_texto = f"Hoy es {dia_str} {ahora.day} de {mes_str} - {hora_str} hs"
 
 with st.sidebar:
     st.markdown(
-        "<h2 style='color: #2E7D32;'>🌿 Mi Panel</h2>",
+        "<h2 style='color: #2D6A4F;'>🌿 Mi Panel</h2>",
         unsafe_allow_html=True
     )
     st.markdown(f"🗓️ **{fecha_hora_texto}**")
@@ -571,7 +661,7 @@ with pestana1:
             <div class="kpi-title">Costo Mensual</div>
             <div class="kpi-value">{total_costos:,.0f} ARS</div>
             <div class="kpi-usd">≈ {costos_usd:,.2f} USD</div>
-            <div class="kpi-sub">{len(costos_activos)} activos</div>
+            <div class="kpi-sub">{len(costos_activos)} ítems activos</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -581,7 +671,7 @@ with pestana1:
             <div class="kpi-title">Ingreso Mensual</div>
             <div class="kpi-value">{total_ingresos:,.0f} ARS</div>
             <div class="kpi-usd">≈ {ingresos_usd:,.2f} USD</div>
-            <div class="kpi-sub">{len(ingresos_activos)} activos</div>
+            <div class="kpi-sub">{len(ingresos_activos)} ítems activos</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -640,122 +730,242 @@ with pestana1:
 
     st.markdown("---")
 
-    # 3. COLUMNAS DE COSTOS E INGRESOS CON AMPLIA SEPARACIÓN
-    col_izq, col_espacio, col_der = st.columns([1, 0.16, 1])
+    # 3. COLUMNAS DE COSTOS E INGRESOS POR CATEGORÍAS COLAPSABLES
+    col_izq, col_espacio, col_der = st.columns([1, 0.12, 1])
 
+    # ---------------- COLUMNA IZQUIERDA: COSTOS POR CATEGORÍA ----------------
     with col_izq:
         st.markdown("<h3 style='color: #A04000;'>📉 Mis Costos Mensuales</h3>", unsafe_allow_html=True)
-        with st.expander("➕ Agregar un Nuevo Costo"):
-            with st.form("form_nuevo_costo", clear_on_submit=True):
-                cat_c = st.text_input("Nombre del costo (ej. Supermercado, Luz)")
-                monto_c = st.number_input("Monto Mensual (ARS)", min_value=0, step=5000)
-                btn_c = st.form_submit_button("Guardar Costo", use_container_width=True)
-                if btn_c and cat_c:
-                    datos["costos"].append({"categoria": cat_c, "monto": monto_c, "activo": True})
-                    guardar_datos(datos)
-                    st.rerun()
+
+        with st.expander("📁 ➕ Agregar Nueva Categoría de Costos"):
+            with st.form("form_nueva_cat_costo", clear_on_submit=True):
+                nueva_cat_c = st.text_input("Nombre de la Categoría (ej. Impuestos, Servicios, Educación)")
+                btn_cat_c = st.form_submit_button("Crear Categoría", use_container_width=True)
+                if btn_cat_c and nueva_cat_c.strip():
+                    nom_limpio = nueva_cat_c.strip()
+                    if nom_limpio not in datos["categorias_costos"]:
+                        datos["categorias_costos"].append(nom_limpio)
+                        guardar_datos(datos)
+                        st.rerun()
 
         costos_modificados = False
-        for idx, item in enumerate(datos["costos"]):
-            estado_check = item.get("activo", True)
-            c_box, c_nombre, c_monto, c_del = st.columns([0.4, 2.1, 1.5, 0.75])
-            with c_box:
-                nuevo_estado = st.checkbox(
-                    "Activo",
-                    value=estado_check,
-                    key=f"costo_check_{idx}",
-                    label_visibility="collapsed"
-                )
-                if nuevo_estado != estado_check:
-                    item["activo"] = nuevo_estado
-                    costos_modificados = True
-            with c_nombre:
-                nuevo_nom = st.text_input(
-                    "Nombre",
-                    value=item["categoria"],
-                    key=f"costo_nom_{idx}",
-                    label_visibility="collapsed",
-                    disabled=not estado_check
-                )
-                if nuevo_nom != item["categoria"]:
-                    item["categoria"] = nuevo_nom
-                    costos_modificados = True
-            with c_monto:
-                nuevo_val = st.number_input(
-                    "Monto",
-                    value=int(item["monto"]),
-                    step=5000,
-                    key=f"costo_val_{idx}",
-                    label_visibility="collapsed",
-                    disabled=not estado_check
-                )
-                if nuevo_val != item["monto"]:
-                    item["monto"] = nuevo_val
-                    costos_modificados = True
-            with c_del:
-                if st.button("🗑️", key=f"costo_del_{idx}", help="Eliminar este costo"):
-                    datos["costos"].pop(idx)
-                    guardar_datos(datos)
-                    st.rerun()
+        for cat_idx, cat_nombre in enumerate(list(datos["categorias_costos"])):
+            items_cat = [
+                (idx, item) for idx, item in enumerate(datos["costos"])
+                if item.get("grupo", "Hogar y Otros") == cat_nombre
+            ]
+            sub_ars = sum(i["monto"] for _, i in items_cat if i.get("activo", True))
+            sub_usd = sub_ars / dolar_b if dolar_b > 0 else 0
+
+            titulo_cat = f"📂 **{cat_nombre}** — Subtotal: **{sub_ars:,.0f} ARS** ({sub_usd:,.1f} USD)"
+            with st.expander(titulo_cat, expanded=True):
+                if items_cat:
+                    h1, h2, h3, h4 = st.columns([0.4, 2.0, 1.5, 0.7])
+                    h1.markdown("<div class='col-header'>Act.</div>", unsafe_allow_html=True)
+                    h2.markdown("<div class='col-header'>Subcategoría</div>", unsafe_allow_html=True)
+                    h3.markdown("<div class='col-header'>Monto (ARS)</div>", unsafe_allow_html=True)
+                    h4.markdown("<div class='col-header'>Borrar</div>", unsafe_allow_html=True)
+
+                for idx, item in items_cat:
+                    estado_check = item.get("activo", True)
+                    c_box, c_nombre, c_monto, c_del = st.columns([0.4, 2.0, 1.5, 0.7])
+                    with c_box:
+                        nuevo_estado = st.checkbox(
+                            "Activo",
+                            value=estado_check,
+                            key=f"costo_check_{idx}",
+                            label_visibility="collapsed"
+                        )
+                        if nuevo_estado != estado_check:
+                            item["activo"] = nuevo_estado
+                            costos_modificados = True
+                    with c_nombre:
+                        nuevo_nom = st.text_input(
+                            "Subcategoría",
+                            value=item["categoria"],
+                            key=f"costo_nom_{idx}",
+                            label_visibility="collapsed",
+                            disabled=not estado_check
+                        )
+                        if nuevo_nom != item["categoria"]:
+                            item["categoria"] = nuevo_nom
+                            costos_modificados = True
+                    with c_monto:
+                        monto_str = formatear_cant(item["monto"])
+                        nuevo_val_str = st.text_input(
+                            "Monto",
+                            value=monto_str,
+                            key=f"costo_val_{idx}",
+                            label_visibility="collapsed",
+                            disabled=not estado_check
+                        )
+                        try:
+                            nuevo_val = float(nuevo_val_str.replace(",", "."))
+                            if nuevo_val != float(item["monto"]):
+                                item["monto"] = int(nuevo_val) if nuevo_val.is_integer() else nuevo_val
+                                costos_modificados = True
+                        except ValueError:
+                            pass
+                    with c_del:
+                        if st.button("🗑️", key=f"costo_del_{idx}", help="Eliminar este ítem"):
+                            datos["costos"].pop(idx)
+                            guardar_datos(datos)
+                            st.rerun()
+
+                with st.form(f"form_sub_costo_{cat_idx}", clear_on_submit=True):
+                    sc1, sc2, sc3 = st.columns([2.0, 1.4, 1.2])
+                    with sc1:
+                        sub_nom_c = st.text_input(
+                            "Nueva subcategoría",
+                            placeholder=f"Nuevo en {cat_nombre}...",
+                            label_visibility="collapsed"
+                        )
+                    with sc2:
+                        sub_val_c = st.text_input(
+                            "Monto ARS",
+                            placeholder="Monto ARS",
+                            label_visibility="collapsed"
+                        )
+                    with sc3:
+                        btn_sub_c = st.form_submit_button("➕ Agregar", use_container_width=True)
+                        if btn_sub_c and sub_nom_c.strip():
+                            try:
+                                m_num = float(sub_val_c.strip().replace(",", ".")) if sub_val_c.strip() else 0
+                            except ValueError:
+                                m_num = 0
+                            datos["costos"].append({
+                                "grupo": cat_nombre,
+                                "categoria": sub_nom_c.strip(),
+                                "monto": int(m_num) if float(m_num).is_integer() else m_num,
+                                "activo": True
+                            })
+                            guardar_datos(datos)
+                            st.rerun()
+
+                if not items_cat:
+                    if st.button(f"🗑️ Eliminar categoría vacía '{cat_nombre}'", key=f"del_cat_c_{cat_idx}"):
+                        datos["categorias_costos"].remove(cat_nombre)
+                        guardar_datos(datos)
+                        st.rerun()
 
         if costos_modificados:
             guardar_datos(datos)
             st.rerun()
 
+    # ---------------- COLUMNA DERECHA: INGRESOS POR CATEGORÍA ----------------
     with col_der:
         st.markdown("<h3 style='color: #117864;'>📈 Mis Ingresos Mensuales</h3>", unsafe_allow_html=True)
-        with st.expander("➕ Agregar un Nuevo Ingreso"):
-            with st.form("form_nuevo_ingreso", clear_on_submit=True):
-                nom_i = st.text_input("Concepto (ej. Sueldo Farmacia, Jubilación)")
-                monto_i = st.number_input("Monto Mensual (ARS)", min_value=0, step=5000)
-                btn_i = st.form_submit_button("Guardar Ingreso", use_container_width=True)
-                if btn_i and nom_i:
-                    datos["ingresos"].append({"concepto": nom_i, "monto": monto_i, "activo": True})
-                    guardar_datos(datos)
-                    st.rerun()
+
+        with st.expander("📁 ➕ Agregar Nueva Categoría de Ingresos"):
+            with st.form("form_nueva_cat_ing", clear_on_submit=True):
+                nueva_cat_i = st.text_input("Nombre de la Categoría (ej. Farmacia, Consultorio, Otros)")
+                btn_cat_i = st.form_submit_button("Crear Categoría", use_container_width=True)
+                if btn_cat_i and nueva_cat_i.strip():
+                    nom_limpio_i = nueva_cat_i.strip()
+                    if nom_limpio_i not in datos["categorias_ingresos"]:
+                        datos["categorias_ingresos"].append(nom_limpio_i)
+                        guardar_datos(datos)
+                        st.rerun()
 
         ingresos_modificados = False
-        for idx, item in enumerate(datos["ingresos"]):
-            estado_check = item.get("activo", True)
-            c_box, c_nombre, c_monto, c_del = st.columns([0.4, 2.1, 1.5, 0.75])
-            with c_box:
-                nuevo_estado = st.checkbox(
-                    "Activo",
-                    value=estado_check,
-                    key=f"ing_check_{idx}",
-                    label_visibility="collapsed"
-                )
-                if nuevo_estado != estado_check:
-                    item["activo"] = nuevo_estado
-                    ingresos_modificados = True
-            with c_nombre:
-                nuevo_nom = st.text_input(
-                    "Concepto",
-                    value=item["concepto"],
-                    key=f"ing_nom_{idx}",
-                    label_visibility="collapsed",
-                    disabled=not estado_check
-                )
-                if nuevo_nom != item["concepto"]:
-                    item["concepto"] = nuevo_nom
-                    ingresos_modificados = True
-            with c_monto:
-                nuevo_val = st.number_input(
-                    "Monto",
-                    value=int(item["monto"]),
-                    step=5000,
-                    key=f"ing_val_{idx}",
-                    label_visibility="collapsed",
-                    disabled=not estado_check
-                )
-                if nuevo_val != item["monto"]:
-                    item["monto"] = nuevo_val
-                    ingresos_modificados = True
-            with c_del:
-                if st.button("🗑️", key=f"ing_del_{idx}", help="Eliminar este ingreso"):
-                    datos["ingresos"].pop(idx)
-                    guardar_datos(datos)
-                    st.rerun()
+        for cat_idx_i, cat_nombre_i in enumerate(list(datos["categorias_ingresos"])):
+            items_cat_i = [
+                (idx, item) for idx, item in enumerate(datos["ingresos"])
+                if item.get("grupo", "Otros Ingresos") == cat_nombre_i
+            ]
+            sub_ars_i = sum(i["monto"] for _, i in items_cat_i if i.get("activo", True))
+            sub_usd_i = sub_ars_i / dolar_b if dolar_b > 0 else 0
+
+            titulo_cat_i = f"📂 **{cat_nombre_i}** — Subtotal: **{sub_ars_i:,.0f} ARS** ({sub_usd_i:,.1f} USD)"
+            with st.expander(titulo_cat_i, expanded=True):
+                if items_cat_i:
+                    hi1, hi2, hi3, hi4 = st.columns([0.4, 2.0, 1.5, 0.7])
+                    hi1.markdown("<div class='col-header'>Act.</div>", unsafe_allow_html=True)
+                    hi2.markdown("<div class='col-header'>Subcategoría</div>", unsafe_allow_html=True)
+                    hi3.markdown("<div class='col-header'>Monto (ARS)</div>", unsafe_allow_html=True)
+                    hi4.markdown("<div class='col-header'>Borrar</div>", unsafe_allow_html=True)
+
+                for idx, item in items_cat_i:
+                    estado_check = item.get("activo", True)
+                    c_box, c_nombre, c_monto, c_del = st.columns([0.4, 2.0, 1.5, 0.7])
+                    with c_box:
+                        nuevo_estado = st.checkbox(
+                            "Activo",
+                            value=estado_check,
+                            key=f"ing_check_{idx}",
+                            label_visibility="collapsed"
+                        )
+                        if nuevo_estado != estado_check:
+                            item["activo"] = nuevo_estado
+                            ingresos_modificados = True
+                    with c_nombre:
+                        nuevo_nom = st.text_input(
+                            "Concepto",
+                            value=item["concepto"],
+                            key=f"ing_nom_{idx}",
+                            label_visibility="collapsed",
+                            disabled=not estado_check
+                        )
+                        if nuevo_nom != item["concepto"]:
+                            item["concepto"] = nuevo_nom
+                            ingresos_modificados = True
+                    with c_monto:
+                        monto_i_str = formatear_cant(item["monto"])
+                        nuevo_val_i_str = st.text_input(
+                            "Monto",
+                            value=monto_i_str,
+                            key=f"ing_val_{idx}",
+                            label_visibility="collapsed",
+                            disabled=not estado_check
+                        )
+                        try:
+                            nuevo_val_i = float(nuevo_val_i_str.replace(",", "."))
+                            if nuevo_val_i != float(item["monto"]):
+                                item["monto"] = int(nuevo_val_i) if nuevo_val_i.is_integer() else nuevo_val_i
+                                ingresos_modificados = True
+                        except ValueError:
+                            pass
+                    with c_del:
+                        if st.button("🗑️", key=f"ing_del_{idx}", help="Eliminar este ingreso"):
+                            datos["ingresos"].pop(idx)
+                            guardar_datos(datos)
+                            st.rerun()
+
+                with st.form(f"form_sub_ing_{cat_idx_i}", clear_on_submit=True):
+                    si1, si2, si3 = st.columns([2.0, 1.4, 1.2])
+                    with si1:
+                        sub_nom_i = st.text_input(
+                            "Nuevo ingreso",
+                            placeholder=f"Nuevo en {cat_nombre_i}...",
+                            label_visibility="collapsed"
+                        )
+                    with si2:
+                        sub_val_i = st.text_input(
+                            "Monto ARS",
+                            placeholder="Monto ARS",
+                            label_visibility="collapsed"
+                        )
+                    with si3:
+                        btn_sub_i = st.form_submit_button("➕ Agregar", use_container_width=True)
+                        if btn_sub_i and sub_nom_i.strip():
+                            try:
+                                mi_num = float(sub_val_i.strip().replace(",", ".")) if sub_val_i.strip() else 0
+                            except ValueError:
+                                mi_num = 0
+                            datos["ingresos"].append({
+                                "grupo": cat_nombre_i,
+                                "concepto": sub_nom_i.strip(),
+                                "monto": int(mi_num) if float(mi_num).is_integer() else mi_num,
+                                "activo": True
+                            })
+                            guardar_datos(datos)
+                            st.rerun()
+
+                if not items_cat_i:
+                    if st.button(f"🗑️ Eliminar categoría vacía '{cat_nombre_i}'", key=f"del_cat_i_{cat_idx_i}"):
+                        datos["categorias_ingresos"].remove(cat_nombre_i)
+                        guardar_datos(datos)
+                        st.rerun()
 
         if ingresos_modificados:
             guardar_datos(datos)
@@ -763,12 +973,18 @@ with pestana1:
 
     st.markdown("---")
 
-    # 4. GRÁFICOS DE TORTA 3D CON PORCIONES SEPARADAS
+    # 4. GRÁFICOS DE TORTA 2D CON FLECHAS EXTERNAS Y SUBTOTALES
     st.markdown(
-        "<h3 style='color: #5B4B8A;'>📊 Gráficos 3D y Porcentajes Discriminados</h3>",
+        "<h3 style='color: #5B4B8A;'>📊 Gráficos de Torta y Subtotales</h3>",
         unsafe_allow_html=True
     )
-    col_chart_c, col_esp_g, col_chart_i = st.columns([1, 0.1, 1])
+    modo_grafico = st.radio(
+        "Ver gráficos de torta según:",
+        ["Por Categoría (Subtotales)", "Detallado por cada Subcategoría"],
+        horizontal=True
+    )
+
+    col_chart_c, col_esp_g, col_chart_i = st.columns([1, 0.08, 1])
 
     with col_chart_c:
         st.markdown(
@@ -776,17 +992,27 @@ with pestana1:
             unsafe_allow_html=True
         )
         if costos_activos and total_costos > 0:
-            df_pie_c = pd.DataFrame(costos_activos).sort_values(by="monto", ascending=False)
+            df_c_raw = pd.DataFrame(costos_activos)
+            if modo_grafico.startswith("Por Categoría"):
+                df_pie_c = df_c_raw.groupby("grupo", as_index=False)["monto"].sum().sort_values(by="monto", ascending=False)
+                col_label_c = "grupo"
+                titulo_col_c = "Categoría"
+            else:
+                df_pie_c = df_c_raw.sort_values(by="monto", ascending=False).copy()
+                df_pie_c["etiqueta"] = df_pie_c["categoria"]
+                col_label_c = "etiqueta"
+                titulo_col_c = "Subcategoría"
+
             df_pie_c["USD"] = df_pie_c["monto"] / dolar_b
             df_pie_c["Porcentaje"] = (df_pie_c["monto"] / total_costos) * 100
 
-            fig_c = crear_torta_3d(df_pie_c, "monto", "categoria")
+            fig_c = crear_torta_2d(df_pie_c, "monto", col_label_c)
             st.plotly_chart(fig_c, use_container_width=True)
 
-            tabla_c = df_pie_c[["categoria", "monto", "USD", "Porcentaje"]].copy()
-            tabla_c.columns = ["Costo", "Valor en ARS", "Valor en USD", "% del Total"]
-            tabla_c["Valor en ARS"] = tabla_c["Valor en ARS"].apply(lambda x: f"{x:,.0f} ARS")
-            tabla_c["Valor en USD"] = tabla_c["Valor en USD"].apply(lambda x: f"{x:,.2f} USD")
+            tabla_c = df_pie_c[[col_label_c, "monto", "USD", "Porcentaje"]].copy()
+            tabla_c.columns = [titulo_col_c, "Subtotal en ARS", "Subtotal en USD", "% del Total"]
+            tabla_c["Subtotal en ARS"] = tabla_c["Subtotal en ARS"].apply(lambda x: f"{x:,.0f} ARS")
+            tabla_c["Subtotal en USD"] = tabla_c["Subtotal en USD"].apply(lambda x: f"{x:,.2f} USD")
             tabla_c["% del Total"] = tabla_c["% del Total"].apply(lambda x: f"{x:.1f}%")
             st.dataframe(tabla_c, use_container_width=True, hide_index=True)
         else:
@@ -798,17 +1024,27 @@ with pestana1:
             unsafe_allow_html=True
         )
         if ingresos_activos and total_ingresos > 0:
-            df_pie_i = pd.DataFrame(ingresos_activos).sort_values(by="monto", ascending=False)
+            df_i_raw = pd.DataFrame(ingresos_activos)
+            if modo_grafico.startswith("Por Categoría"):
+                df_pie_i = df_i_raw.groupby("grupo", as_index=False)["monto"].sum().sort_values(by="monto", ascending=False)
+                col_label_i = "grupo"
+                titulo_col_i = "Categoría"
+            else:
+                df_pie_i = df_i_raw.sort_values(by="monto", ascending=False).copy()
+                df_pie_i["etiqueta"] = df_pie_i["concepto"]
+                col_label_i = "etiqueta"
+                titulo_col_i = "Subcategoría"
+
             df_pie_i["USD"] = df_pie_i["monto"] / dolar_b
             df_pie_i["Porcentaje"] = (df_pie_i["monto"] / total_ingresos) * 100
 
-            fig_i = crear_torta_3d(df_pie_i, "monto", "concepto")
+            fig_i = crear_torta_2d(df_pie_i, "monto", col_label_i)
             st.plotly_chart(fig_i, use_container_width=True)
 
-            tabla_i = df_pie_i[["concepto", "monto", "USD", "Porcentaje"]].copy()
-            tabla_i.columns = ["Ingreso", "Valor en ARS", "Valor en USD", "% del Total"]
-            tabla_i["Valor en ARS"] = tabla_i["Valor en ARS"].apply(lambda x: f"{x:,.0f} ARS")
-            tabla_i["Valor en USD"] = tabla_i["Valor en USD"].apply(lambda x: f"{x:,.2f} USD")
+            tabla_i = df_pie_i[[col_label_i, "monto", "USD", "Porcentaje"]].copy()
+            tabla_i.columns = [titulo_col_i, "Subtotal en ARS", "Subtotal en USD", "% del Total"]
+            tabla_i["Subtotal en ARS"] = tabla_i["Subtotal en ARS"].apply(lambda x: f"{x:,.0f} ARS")
+            tabla_i["Subtotal en USD"] = tabla_i["Subtotal en USD"].apply(lambda x: f"{x:,.2f} USD")
             tabla_i["% del Total"] = tabla_i["% del Total"].apply(lambda x: f"{x:.1f}%")
             st.dataframe(tabla_i, use_container_width=True, hide_index=True)
         else:
@@ -825,35 +1061,36 @@ with pestana2:
     for inv in inversiones:
         cant = float(inv.get("cantidad", 0))
         tipo = inv.get("tipo", "Pesos ARS")
-        simbolo = inv.get("simbolo", "").upper()
+        simbolo = inv.get("simbolo", "").upper().strip()
         esta_activo = inv.get("activo_inv", True)
 
         if tipo == "Dólar Billete":
             val_usd = cant
             val_ars = cant * dolar_b
-            precio_ref = f"{dolar_b:,.0f} ARS"
+            cotiz_actual_str = f"1 USD = {dolar_b:,.0f} ARS"
         elif tipo == "Criptomonedas":
             precio_u = cotizaciones.get(simbolo, 1.0)
             val_usd = cant * precio_u
             val_ars = val_usd * dolar_b
-            precio_ref = f"{precio_u:,.2f} USD"
+            cotiz_actual_str = f"1 {simbolo} = {precio_u:,.2f} USD ({precio_u*dolar_b:,.0f} ARS)"
         elif tipo == "Acciones":
             precio_u = cotizaciones.get(simbolo, 100.0)
             val_usd = cant * precio_u
             val_ars = val_usd * dolar_b
-            precio_ref = f"{precio_u:,.2f} USD"
+            cotiz_actual_str = f"1 {simbolo} = {precio_u:,.2f} USD ({precio_u*dolar_b:,.0f} ARS)"
         else:
             val_ars = cant
             val_usd = cant / dolar_b if dolar_b > 0 else 0
-            precio_ref = "1 ARS"
+            cotiz_actual_str = f"1 USD = {dolar_b:,.0f} ARS"
 
         filas.append({
             "Tipo": tipo,
             "Activo": inv.get("activo", tipo),
             "Simbolo": simbolo,
             "Plataforma": inv.get("plataforma", ""),
-            "Cantidad": cant,
-            "Precio Unitario": precio_ref,
+            "Cantidad_Num": cant,
+            "Cantidad": formatear_cant(cant),
+            "Cotización Actual": cotiz_actual_str,
             "Valor en ARS": val_ars,
             "Valor en USD": val_usd,
             "Activo_Flag": esta_activo
@@ -868,7 +1105,7 @@ with pestana2:
     total_patrimonio_ars = df_inv_activos["Valor en ARS"].sum() if not df_inv_activos.empty else 0
     total_patrimonio_usd = df_inv_activos["Valor en USD"].sum() if not df_inv_activos.empty else 0
 
-    # TARJETA ÚNICA DE PATRIMONIO TOTAL EN LILA PASTEL MATE
+    # TARJETA ÚNICA DE PATRIMONIO TOTAL
     st.markdown(f"""
     <div class="metric-card metric-card-lila" style="text-align: center;">
         <div class="kpi-title" style="font-size: 1.25rem;">Patrimonio Total</div>
@@ -880,9 +1117,10 @@ with pestana2:
 
     st.markdown("---")
 
-    # COLUMNAS DE INVERSIONES CON SEPARACIÓN AMPLIA
-    col_inv_izq, col_inv_esp, col_inv_der = st.columns([1, 0.16, 1.7])
+    # COLUMNAS DE INVERSIONES
+    col_inv_izq, col_inv_esp, col_inv_der = st.columns([1.05, 0.12, 1.85])
 
+    # ---------------- COLUMNA IZQUIERDA: AGREGAR ACTIVO ----------------
     with col_inv_izq:
         st.markdown(
             "<h3 style='color: #5B4B8A;'>➕ Agregar Activo</h3>",
@@ -897,138 +1135,203 @@ with pestana2:
         ]
         tipo_elegido = st.selectbox("1. Tipo de Activo", opciones_tipo)
 
-        simbolo_sugerido = "USD"
-        nombre_act = "Dólar Billete"
-        tipo_guardar = "Dólar Billete"
+        # Formulario unificado para que al apretar ENTER en cualquier campo se guarde el activo y sin ,0000
+        with st.form("form_guardar_activo_inv", clear_on_submit=True):
+            simbolo_elegido = "USD"
+            detalle_manual = ""
 
-        if tipo_elegido.startswith("A"):
-            tipo_guardar = "Dólar Billete"
-            nombre_act = "Dólar Billete"
-            simbolo_sugerido = "USD"
-        elif tipo_elegido.startswith("B"):
-            tipo_guardar = "Pesos ARS"
-            nombre_act = "Pesos ARS"
-            simbolo_sugerido = "ARS"
-        elif tipo_elegido.startswith("C"):
-            tipo_guardar = "Acciones"
-            opciones_acc = [
-                "AAPL (Apple)", "KO (Coca-Cola)", "MELI (MercadoLibre)",
-                "SPY (S&P 500)", "MSFT (Microsoft)", "GOOGL (Google)",
-                "NVDA (Nvidia)", "TSLA (Tesla)", "AMZN (Amazon)",
-                "YPFD (YPF)", "Otra acción..."
-            ]
-            ticker_lista = st.selectbox("Seleccioná la Acción", opciones_acc)
-            if ticker_lista == "Otra acción...":
-                simbolo_sugerido = st.text_input(
-                    "Símbolo de la Acción (ej. DIS, V)",
-                    value="DIS"
-                ).upper()
-                nombre_act = simbolo_sugerido
-            else:
-                simbolo_sugerido = ticker_lista.split(" ")[0]
-                nombre_act = ticker_lista
-        elif tipo_elegido.startswith("D"):
-            tipo_guardar = "Criptomonedas"
-            simbolo_sugerido = st.selectbox(
-                "Seleccioná la Criptomoneda",
-                ["BTC", "ETH", "USDT", "SOL", "BNB"]
+            if tipo_elegido.startswith("C"):
+                lista_acc_actual = datos.get("acciones_guardadas", [])
+                simbolo_elegido = st.selectbox("Seleccioná la Acción de la lista", lista_acc_actual)
+                detalle_manual = st.text_input(
+                    "¿No está en la lista? Escribila a mano acá y quedará grabada (ej. DIS, V):"
+                )
+            elif tipo_elegido.startswith("D"):
+                lista_cri_actual = datos.get("criptos_guardadas", [])
+                simbolo_elegido = st.selectbox("Seleccioná la Criptomoneda de la lista", lista_cri_actual)
+                detalle_manual = st.text_input(
+                    "¿No está en la lista? Escribí la sigla a mano acá y quedará grabada (ej. DFT, ADA):"
+                )
+            elif tipo_elegido.startswith("E"):
+                detalle_manual = st.text_input(
+                    "Detalle qué es (ej. FRASCO NX, FCI, PF UVA)"
+                )
+
+            plat_act = st.text_input("2. Ubicación, ¿dónde está?")
+            cant_texto = st.text_input(
+                "3. Cantidad que tenés (apretá Enter para guardar)",
+                placeholder="Ej: 40000 o 0.5"
             )
-            nombre_act = simbolo_sugerido
-        elif tipo_elegido.startswith("E"):
-            tipo_guardar = "Otros"
-            detalle_otro = st.text_input(
-                "Detalle qué es (ej. FCI, PF UVA, etc.)"
+            btn_guardar_inv = st.form_submit_button(
+                "Guardar Activo",
+                use_container_width=True
             )
-            nombre_act = detalle_otro.strip() if detalle_otro.strip() else "Otros"
-            simbolo_sugerido = "ARS"
 
-        plat_act = st.text_input("2. Ubicación, ¿dónde está?")
-        cant_act = st.number_input(
-            "3. Cantidad que tenés",
-            min_value=0.0,
-            step=1.0,
-            format="%.4f"
-        )
+            if btn_guardar_inv:
+                texto_limpio = cant_texto.strip().replace(",", ".")
+                try:
+                    cant_num = float(texto_limpio) if texto_limpio else 0.0
+                except ValueError:
+                    cant_num = -1.0
 
-        if st.button("Guardar Activo", use_container_width=True):
-            if cant_act > 0:
-                datos["inversiones"].append({
-                    "tipo": tipo_guardar,
-                    "activo": nombre_act,
-                    "simbolo": simbolo_sugerido,
-                    "cantidad": cant_act,
-                    "plataforma": plat_act,
-                    "activo_inv": True
-                })
-                guardar_datos(datos)
-                st.cache_data.clear()
-                st.rerun()
+                if cant_num > 0:
+                    if tipo_elegido.startswith("A"):
+                        tipo_guardar = "Dólar Billete"
+                        nombre_act = "Dólar Billete"
+                        simbolo_final = "USD"
+                    elif tipo_elegido.startswith("B"):
+                        tipo_guardar = "Pesos ARS"
+                        nombre_act = "Pesos ARS"
+                        simbolo_final = "ARS"
+                    elif tipo_elegido.startswith("C"):
+                        tipo_guardar = "Acciones"
+                        if detalle_manual.strip():
+                            nuevo_acc = detalle_manual.strip().upper()
+                            if nuevo_acc not in datos["acciones_guardadas"]:
+                                datos["acciones_guardadas"].append(nuevo_acc)
+                            nombre_act = nuevo_acc
+                            simbolo_final = nuevo_acc.split(" ")[0]
+                        else:
+                            nombre_act = simbolo_elegido
+                            simbolo_final = simbolo_elegido.split(" ")[0].upper()
+                    elif tipo_elegido.startswith("D"):
+                        tipo_guardar = "Criptomonedas"
+                        if detalle_manual.strip():
+                            nueva_cri = detalle_manual.strip().upper().split(" ")[0]
+                            if nueva_cri not in datos["criptos_guardadas"]:
+                                datos["criptos_guardadas"].append(nueva_cri)
+                            nombre_act = nueva_cri
+                            simbolo_final = nueva_cri
+                        else:
+                            nombre_act = simbolo_elegido.strip().upper()
+                            simbolo_final = nombre_act
+                    else:
+                        tipo_guardar = "Otros"
+                        nombre_act = detalle_manual.strip() if detalle_manual.strip() else "Otros"
+                        simbolo_final = "ARS"
 
+                    datos["inversiones"].append({
+                        "tipo": tipo_guardar,
+                        "activo": nombre_act,
+                        "simbolo": simbolo_final,
+                        "cantidad": int(cant_num) if cant_num.is_integer() else cant_num,
+                        "plataforma": plat_act.strip() if plat_act.strip() else "Sin especificar",
+                        "activo_inv": True
+                    })
+                    guardar_datos(datos)
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.warning("Ingresá una cantidad válida mayor a 0.")
+
+    # ---------------- COLUMNA DERECHA: MIS ACTIVOS POR CATEGORÍA CON ENCABEZADOS ----------------
     with col_inv_der:
         st.markdown(
-            "<h3 style='color: #5B4B8A;'>📋 Mis Activos</h3>",
+            "<h3 style='color: #5B4B8A;'>📋 Mis Activos por Categoría</h3>",
             unsafe_allow_html=True
         )
+        orden_categorias_inv = [
+            "Dólar Billete",
+            "Pesos ARS",
+            "Acciones",
+            "Criptomonedas",
+            "Otros"
+        ]
+
         if inversiones:
             inv_cambios = False
-            for idx, inv in enumerate(inversiones):
-                st_act = inv.get("activo_inv", True)
-                c_chk, c_nom, c_cant, c_plat, c_del = st.columns([0.4, 1.5, 1.3, 1.3, 0.75])
+            for cat_inv in orden_categorias_inv:
+                items_cat_inv = [
+                    (idx, inv) for idx, inv in enumerate(inversiones)
+                    if inv.get("tipo", "Otros") == cat_inv
+                ]
+                if not items_cat_inv:
+                    continue
 
-                with c_chk:
-                    nuevo_chk = st.checkbox(
-                        "Activo",
-                        value=st_act,
-                        key=f"inv_chk_{idx}",
-                        label_visibility="collapsed"
-                    )
-                    if nuevo_chk != st_act:
-                        inv["activo_inv"] = nuevo_chk
-                        inv_cambios = True
+                sub_inv_ars = sum(
+                    filas[idx]["Valor en ARS"]
+                    for idx, inv in items_cat_inv
+                    if inv.get("activo_inv", True)
+                )
+                sub_inv_usd = sum(
+                    filas[idx]["Valor en USD"]
+                    for idx, inv in items_cat_inv
+                    if inv.get("activo_inv", True)
+                )
 
-                with c_nom:
-                    nuevo_nom_inv = st.text_input(
-                        "Activo",
-                        value=inv.get("activo", ""),
-                        key=f"inv_nom_{idx}",
-                        label_visibility="collapsed",
-                        disabled=not st_act
-                    )
-                    if nuevo_nom_inv != inv.get("activo", ""):
-                        inv["activo"] = nuevo_nom_inv
-                        inv_cambios = True
+                titulo_exp_inv = (
+                    f"📂 **{cat_inv}** — Subtotal: "
+                    f"**{sub_inv_ars:,.0f} ARS** ({sub_inv_usd:,.2f} USD)"
+                )
+                with st.expander(titulo_exp_inv, expanded=True):
+                    hc1, hc2, hc3, hc4, hc5 = st.columns([0.4, 1.45, 1.25, 1.35, 0.65])
+                    hc1.markdown("<div class='col-header'>Act.</div>", unsafe_allow_html=True)
+                    hc2.markdown("<div class='col-header'>Detalle</div>", unsafe_allow_html=True)
+                    hc3.markdown("<div class='col-header'>Cantidad</div>", unsafe_allow_html=True)
+                    hc4.markdown("<div class='col-header'>Ubicación</div>", unsafe_allow_html=True)
+                    hc5.markdown("<div class='col-header'>Borrar</div>", unsafe_allow_html=True)
 
-                with c_cant:
-                    nueva_c = st.number_input(
-                        "Cantidad",
-                        value=float(inv.get("cantidad", 0)),
-                        step=1.0,
-                        format="%.4f",
-                        key=f"inv_cant_{idx}",
-                        label_visibility="collapsed",
-                        disabled=not st_act
-                    )
-                    if nueva_c != float(inv.get("cantidad", 0)):
-                        inv["cantidad"] = nueva_c
-                        inv_cambios = True
+                    for idx, inv in items_cat_inv:
+                        st_act = inv.get("activo_inv", True)
+                        c_chk, c_nom, c_cant, c_plat, c_del = st.columns([0.4, 1.45, 1.25, 1.35, 0.65])
 
-                with c_plat:
-                    nueva_p = st.text_input(
-                        "Ubicación",
-                        value=inv.get("plataforma", ""),
-                        key=f"inv_p_{idx}",
-                        label_visibility="collapsed",
-                        disabled=not st_act
-                    )
-                    if nueva_p != inv.get("plataforma", ""):
-                        inv["plataforma"] = nueva_p
-                        inv_cambios = True
+                        with c_chk:
+                            nuevo_chk = st.checkbox(
+                                "Activo",
+                                value=st_act,
+                                key=f"inv_chk_{idx}",
+                                label_visibility="collapsed"
+                            )
+                            if nuevo_chk != st_act:
+                                inv["activo_inv"] = nuevo_chk
+                                inv_cambios = True
 
-                with c_del:
-                    if st.button("🗑️", key=f"inv_del_{idx}", help="Eliminar este activo"):
-                        datos["inversiones"].pop(idx)
-                        guardar_datos(datos)
-                        st.rerun()
+                        with c_nom:
+                            nuevo_nom_inv = st.text_input(
+                                "Detalle",
+                                value=inv.get("activo", ""),
+                                key=f"inv_nom_{idx}",
+                                label_visibility="collapsed",
+                                disabled=not st_act
+                            )
+                            if nuevo_nom_inv != inv.get("activo", ""):
+                                inv["activo"] = nuevo_nom_inv
+                                inv_cambios = True
+
+                        with c_cant:
+                            cant_str_actual = formatear_cant(inv.get("cantidad", 0))
+                            nueva_c_str = st.text_input(
+                                "Cantidad",
+                                value=cant_str_actual,
+                                key=f"inv_cant_{idx}",
+                                label_visibility="collapsed",
+                                disabled=not st_act
+                            )
+                            try:
+                                nueva_c_num = float(nueva_c_str.replace(",", "."))
+                                if nueva_c_num != float(inv.get("cantidad", 0)):
+                                    inv["cantidad"] = int(nueva_c_num) if nueva_c_num.is_integer() else nueva_c_num
+                                    inv_cambios = True
+                            except ValueError:
+                                pass
+
+                        with c_plat:
+                            nueva_p = st.text_input(
+                                "Ubicación",
+                                value=inv.get("plataforma", ""),
+                                key=f"inv_p_{idx}",
+                                label_visibility="collapsed",
+                                disabled=not st_act
+                            )
+                            if nueva_p != inv.get("plataforma", ""):
+                                inv["plataforma"] = nueva_p
+                                inv_cambios = True
+
+                        with c_del:
+                            if st.button("🗑️", key=f"inv_del_{idx}", help="Eliminar este activo"):
+                                datos["inversiones"].pop(idx)
+                                guardar_datos(datos)
+                                st.rerun()
 
             if inv_cambios:
                 guardar_datos(datos)
@@ -1038,17 +1341,17 @@ with pestana2:
 
     st.markdown("---")
 
-    # GRÁFICOS DE TORTA 3D DE INVERSIONES CON TABLAS DEBAJO
+    # GRÁFICOS DE TORTA 2D CON FLECHAS EXTERNAS Y TABLAS CON COTIZACIÓN ACTUAL
     st.markdown(
-        "<h3 style='color: #5B4B8A;'>📊 Distribución 3D Detallada de Mi Cartera</h3>",
+        "<h3 style='color: #5B4B8A;'>📊 Distribución de Mi Cartera y Cotizaciones en Vivo</h3>",
         unsafe_allow_html=True
     )
     if not df_inv_activos.empty and total_patrimonio_ars > 0:
-        col_g_inv1, col_g_esp, col_g_inv2 = st.columns([1, 0.1, 1])
+        col_g_inv1, col_g_esp, col_g_inv2 = st.columns([1, 0.08, 1])
 
         with col_g_inv1:
             st.markdown(
-                "<h4 style='color: #5B4B8A; text-align: center;'>Por Tipo de Activo</h4>",
+                "<h4 style='color: #5B4B8A; text-align: center;'>Por Categoría de Activo</h4>",
                 unsafe_allow_html=True
             )
             resumen_tipo = df_inv_activos.groupby("Tipo", as_index=False).agg({
@@ -1057,35 +1360,36 @@ with pestana2:
             }).sort_values(by="Valor en ARS", ascending=False)
             resumen_tipo["%"] = (resumen_tipo["Valor en ARS"] / total_patrimonio_ars) * 100
 
-            fig_inv_tipo = crear_torta_3d(resumen_tipo, "Valor en ARS", "Tipo")
+            fig_inv_tipo = crear_torta_2d(resumen_tipo, "Valor en ARS", "Tipo")
             st.plotly_chart(fig_inv_tipo, use_container_width=True)
 
             tabla_t = resumen_tipo.copy()
-            tabla_t["Valor en ARS"] = tabla_t["Valor en ARS"].apply(lambda x: f"{x:,.0f} ARS")
-            tabla_t["Valor en USD"] = tabla_t["Valor en USD"].apply(lambda x: f"{x:,.2f} USD")
+            tabla_t.columns = ["Categoría", "Subtotal en ARS", "Subtotal en USD", "%"]
+            tabla_t["Subtotal en ARS"] = tabla_t["Subtotal en ARS"].apply(lambda x: f"{x:,.0f} ARS")
+            tabla_t["Subtotal en USD"] = tabla_t["Subtotal en USD"].apply(lambda x: f"{x:,.2f} USD")
             tabla_t["%"] = tabla_t["%"].apply(lambda x: f"{x:.1f}%")
             st.dataframe(tabla_t, use_container_width=True, hide_index=True)
 
         with col_g_inv2:
             st.markdown(
-                "<h4 style='color: #5B4B8A; text-align: center;'>Por Activo y Ubicación</h4>",
+                "<h4 style='color: #5B4B8A; text-align: center;'>Por Activo Individual y Ubicación</h4>",
                 unsafe_allow_html=True
             )
             df_det = df_inv_activos.sort_values(by="Valor en ARS", ascending=False).copy()
             df_det["Etiqueta"] = df_det["Activo"] + " (" + df_det["Plataforma"] + ")"
             df_det["%"] = (df_det["Valor en ARS"] / total_patrimonio_ars) * 100
 
-            fig_inv_det = crear_torta_3d(df_det, "Valor en ARS", "Etiqueta")
+            fig_inv_det = crear_torta_2d(df_det, "Valor en ARS", "Etiqueta")
             st.plotly_chart(fig_inv_det, use_container_width=True)
 
             cols_d = [
-                "Activo", "Plataforma", "Cantidad",
-                "Valor en ARS", "Valor en USD", "%"
+                "Tipo", "Activo", "Plataforma", "Cantidad",
+                "Cotización Actual", "Valor en ARS", "Valor en USD", "%"
             ]
             tabla_d = df_det[cols_d].copy()
             tabla_d.columns = [
-                "Activo", "Ubicación", "Cantidad",
-                "Valor en ARS", "Valor en USD", "%"
+                "Categoría", "Activo", "Ubicación", "Cantidad",
+                "Cotización Actual Tomada", "Valor en ARS", "Valor en USD", "%"
             ]
             tabla_d["Valor en ARS"] = tabla_d["Valor en ARS"].apply(lambda x: f"{x:,.0f} ARS")
             tabla_d["Valor en USD"] = tabla_d["Valor en USD"].apply(lambda x: f"{x:,.2f} USD")
