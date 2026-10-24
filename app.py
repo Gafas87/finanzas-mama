@@ -429,8 +429,10 @@ def pantalla_login(cred):
         if entrar:
             if espera > 0:
                 st.error(f"Demasiados intentos. Esperá {int(espera) + 1} segundos y probá de nuevo.")
-            elif (hmac.compare_digest(usuario.strip().lower(), str(cred.get("usuario", "")).strip().lower())
-                  and hmac.compare_digest(password, str(cred.get("password", "")))):
+            elif (hmac.compare_digest(usuario.strip().lower().encode("utf-8"),
+                                      str(cred.get("usuario", "")).strip().lower().encode("utf-8"))
+                  and hmac.compare_digest(password.encode("utf-8"),
+                                          str(cred.get("password", "")).encode("utf-8"))):
                 ss.autenticado = True
                 ss.intentos = 0
                 st.rerun()
@@ -812,14 +814,15 @@ with pestana2:
     if p["sin_valor"]:
         nombres = ", ".join(i.get("activo", "") for i in p["sin_valor"])
         notas.append(f"⚠️ Sin cotización, no incluido en el total: {nombres}")
-    usadas_guardadas = [s for g in ("cripto", "acciones") for s, v in cotiz[g].items() if v["estado"] == "guardada"]
+    usadas_guardadas = [sim for g in ("cripto", "acciones") for sim, v in cotiz[g].items()
+                        if v["estado"] == "guardada"]
     if cotiz["dolar"]["estado"] == "guardada":
         usadas_guardadas.insert(0, "dólar")
     if usadas_guardadas:
         notas.append("⚠️ Con la última cotización conocida (no en vivo): " + ", ".join(usadas_guardadas))
-    sub = "<br>".join(notas) if notas else "Calculado con cotizaciones en vivo"
+    nota_total = "<br>".join(notas) if notas else "Calculado con cotizaciones en vivo"
     tarjeta("metric-card-lila", "Patrimonio total", fmt_ars(p["ars"]),
-            fmt_usd(p["usd"]) if p["usd"] is not None else None, sub, estilo="text-align:center")
+            fmt_usd(p["usd"]) if p["usd"] is not None else None, nota_total, estilo="text-align:center")
 
     st.write("")
     c_izq, _, c_der = st.columns([0.85, 0.05, 2.15])
@@ -891,8 +894,9 @@ with pestana2:
                     v = valores[iid]
                     estado = estado_cotizacion(dato_cotizacion(inv), corto=True)
                     clase_estado = "estado-alerta" if "⚠️" in estado else "estado-fila"
-                    f[4].markdown(f"<div class='valor-fila'>{h(fmt_ars(v['valor_ars'])) if v['valor_ars'] is not None else '—'}"
-                                  f"</div><div class='{clase_estado}'>{estado}</div>", unsafe_allow_html=True)
+                    valor_txt = h(fmt_ars(v["valor_ars"])) if v["valor_ars"] is not None else "—"
+                    f[4].markdown(f"<div class='valor-fila'>{valor_txt}</div>"
+                                  f"<div class='{clase_estado}'>{estado}</div>", unsafe_allow_html=True)
                     f[5].button("🗑️", key=f"v_del_{iid}", help=f"Borrar «{inv.get('activo', '')}»",
                                 on_click=cb_pedir_borrar, args=(iid,), width="stretch")
                     for k in ks.values():
@@ -916,7 +920,7 @@ with pestana2:
         filas.append({"Categoría": tipo_inv, "Activo": inv.get("activo", ""), "Dónde está": inv.get("plataforma", ""),
                       "Cantidad": fmt_editable(inv.get("cantidad", 0)), "Cotización usada": precio_txt,
                       "Estado": estado_cotizacion(dato), "_ars": v["valor_ars"]})
-    con_valor = [f for f in filas if f["_ars"] is not None and f["_ars"] > 0]
+    con_valor = [fila for fila in filas if fila["_ars"] is not None and fila["_ars"] > 0]
     if not con_valor:
         st.info("No hay inversiones incluidas con valor para mostrar.")
     else:
@@ -939,5 +943,6 @@ with pestana2:
             st.plotly_chart(torta(etiquetas, dd["_ars"].tolist()), config={"displayModeBar": False})
         tabla = pd.DataFrame(filas).sort_values("_ars", ascending=False, na_position="last")
         tabla["Valor en pesos"] = tabla["_ars"].map(lambda x: fmt_ars(x) if x is not None and x == x else "—")
-        tabla["Valor en dólares"] = tabla["_ars"].map(lambda x: fmt_usd(x / dolar) if dolar and x == x and x is not None else "—")
+        tabla["Valor en dólares"] = tabla["_ars"].map(
+            lambda x: fmt_usd(x / dolar) if dolar and x is not None and x == x else "—")
         st.dataframe(tabla.drop(columns=["_ars"]), hide_index=True)
