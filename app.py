@@ -1,4 +1,4 @@
-""Jardín Financiero, versión 2.
+"""Jardín Financiero, versión 2.
 
 Presupuesto mensual, calculadora de terapias y cartera de inversiones.
 Ejecutar:  streamlit run app.py
