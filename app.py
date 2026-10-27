@@ -1823,3 +1823,4 @@ with pestana2:
             tabla_d["%"] = tabla_d["%"].apply(lambda x: f"{x:.1f}%")
             st.dataframe(tabla_d, use_container_width=True, hide_index=True)
     else:
+        st.info("No hay inversiones activas para mostrar en los gráficos.")
