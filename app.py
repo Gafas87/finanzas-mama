@@ -76,13 +76,66 @@ def predecir_icono_categoria(nombre, tipo="costo"):
     return "💵" if tipo == "ingreso" else "📌"
 
 
-# ----------------- NAVEGACIÓN CON FLECHAS + DRAG & DROP INTERACTIVO -----------------
-def activar_interactividad_avanzada():
+# ----------------- INTERACTIVIDAD: FLECHAS, COLORES Y DRAG & DROP UNIVERSAL -----------------
+def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
+    cats_c_json = json.dumps(cats_costos or [], ensure_ascii=False)
+    cats_i_json = json.dumps(cats_ingresos or [], ensure_ascii=False)
     js_code = """
     <script>
     const doc = window.parent.document;
+    const CATS_COSTOS = __CATS_COSTOS__;
+    const CATS_INGRESOS = __CATS_INGRESOS__;
 
-    // 1. Navegación con flechas Arriba/Abajo entre casilleros numéricos y de texto
+    // 1. Ocultar cualquier cartel "Press Enter to apply" / "Press Enter to submit" dinámicamente
+    function ocultarCartelesPressEnter() {
+        const instrucciones = doc.querySelectorAll('[data-testid="InputInstructions"]');
+        instrucciones.forEach(el => {
+            el.style.display = 'none';
+            el.style.visibility = 'hidden';
+        });
+    }
+
+    // 2. Colorear en Rojo Pastel y Verde Pastel las solapas de AGREGAR NUEVA CATEGORÍA
+    function colorearSolapasAgregarCategoria() {
+        const todosDetails = Array.from(doc.querySelectorAll('details'));
+        todosDetails.forEach(det => {
+            const sum = det.querySelector('summary');
+            if (!sum) return;
+            const txt = (sum.innerText || '').toUpperCase();
+
+            if (txt.includes('AGREGAR NUEVA CATEGORÍA DE COSTOS')) {
+                det.style.backgroundColor = '#FDEDEC';
+                det.style.border = '2px solid #E57373';
+                det.style.borderRadius = '14px';
+                det.style.marginBottom = '10px';
+                sum.style.backgroundColor = '#FADBD8';
+                sum.style.color = '#78281F';
+                sum.style.fontWeight = '800';
+                sum.style.borderRadius = '12px';
+                sum.style.padding = '10px 14px';
+                sum.querySelectorAll('p, span').forEach(el => {
+                    el.style.color = '#78281F';
+                    el.style.fontWeight = '800';
+                });
+            } else if (txt.includes('AGREGAR NUEVA CATEGORÍA DE INGRESOS')) {
+                det.style.backgroundColor = '#E8F8F5';
+                det.style.border = '2px solid #52BE80';
+                det.style.borderRadius = '14px';
+                det.style.marginBottom = '10px';
+                sum.style.backgroundColor = '#D4EFDF';
+                sum.style.color = '#145A32';
+                sum.style.fontWeight = '800';
+                sum.style.borderRadius = '12px';
+                sum.style.padding = '10px 14px';
+                sum.querySelectorAll('p, span').forEach(el => {
+                    el.style.color = '#145A32';
+                    el.style.fontWeight = '800';
+                });
+            }
+        });
+    }
+
+    // 3. Navegación con flechas Arriba/Abajo del teclado entre inputs
     if (!doc.flechasNavegacionActivas) {
         doc.addEventListener('keydown', function(e) {
             const active = doc.activeElement;
@@ -93,7 +146,9 @@ def activar_interactividad_avanzada():
                     doc.querySelectorAll(
                         'input:not([disabled]):not([type="hidden"]):not([type="checkbox"])'
                     )
-                ).filter(el => el.offsetParent !== null);
+                ).filter(el => el.offsetParent !== null &&
+                               el.placeholder !== 'SYNC_ORDEN_COSTOS' &&
+                               el.placeholder !== 'SYNC_ORDEN_INGRESOS');
 
                 const idx = inputs.indexOf(active);
                 if (idx !== -1) {
@@ -112,178 +167,257 @@ def activar_interactividad_avanzada():
         doc.flechasNavegacionActivas = true;
     }
 
-    // 2. Drag & Drop directo sobre los bloques de categorías (Mouse, Trackpad y Táctil Android)
-    function enviarNuevoOrdenAStreamlit(placeholderText, nuevoOrdenArray) {
+    // 4. Enviar nuevo orden de categorías a Streamlit
+    function enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrdenArray) {
         const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
-        const targetInput = inputs.find(el => el.placeholder === placeholderText);
+        const targetInput = inputs.find(
+            el => el.placeholder === placeholderKey || el.getAttribute('aria-label') === placeholderKey
+        );
         if (!targetInput) return;
 
         const valorJson = JSON.stringify(nuevoOrdenArray);
         if (targetInput.value === valorJson) return;
+
+        const prevActive = doc.activeElement;
+        targetInput.focus();
 
         const nativeSetter = Object.getOwnPropertyDescriptor(
             window.parent.HTMLInputElement.prototype,
             'value'
         ).set;
         nativeSetter.call(targetInput, valorJson);
+
+        if (targetInput._valueTracker) {
+            targetInput._valueTracker.setValue('');
+        }
+
         targetInput.dispatchEvent(new Event('input', { bubbles: true }));
         targetInput.dispatchEvent(new Event('change', { bubbles: true }));
         targetInput.dispatchEvent(new KeyboardEvent('keydown', {
-            key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
+            key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
+        }));
+        targetInput.dispatchEvent(new KeyboardEvent('keypress', {
+            key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
+        }));
+        targetInput.dispatchEvent(new KeyboardEvent('keyup', {
+            key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
         }));
         targetInput.blur();
+        if (prevActive && prevActive !== targetInput && prevActive.focus) {
+            prevActive.focus();
+        }
     }
 
+    // Encuentra el contenedor directo movible de `det` dentro del padre compartido con `refDet`
+    function obtenerBloqueMovible(det, refDet) {
+        let curr = det;
+        while (curr && curr.parentElement && !curr.parentElement.contains(refDet)) {
+            curr = curr.parentElement;
+        }
+        return curr;
+    }
+
+    // 5. Drag & Drop con Pointer Events (funciona con Mouse, Pad de Notebook y Táctil Android)
     function inicializarDragCategorias() {
+        ocultarCartelesPressEnter();
+        colorearSolapasAgregarCategoria();
+
         const expanders = Array.from(doc.querySelectorAll('details'));
-        const grupos = { costo: [], ingreso: [] };
+        const detsPorTipo = { costo: [], ingreso: [] };
+
+        // Encontrar encabezados de referencia para distinguir Costos (izquierda) vs Ingresos (derecha)
+        const h3s = Array.from(doc.querySelectorAll('h3'));
+        const h3Ingresos = h3s.find(el => (el.innerText || '').includes('Mis Ingresos Mensuales'));
 
         expanders.forEach(det => {
             const summary = det.querySelector('summary');
             if (!summary) return;
-            const texto = summary.innerText || '';
-            if (!texto.includes('Subtotal:')) return;
+            const texto = summary.innerText || summary.textContent || '';
+            if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
 
-            const wrapper = det.closest('[data-testid="stExpander"]') || det;
-            if (texto.includes('⠿')) {
-                // Determinar a qué columna pertenece buscando el encabezado superior
-                const col = wrapper.closest('[data-testid="column"]');
-                if (!col) return;
-                const colText = col.innerText || '';
-                const tipo = colText.includes('Mis Costos Mensuales') ? 'costo' :
-                             (colText.includes('Mis Ingresos Mensuales') ? 'ingreso' : null);
-                if (!tipo) return;
-
-                // Extraer el nombre limpio de la categoría
-                let parteCat = texto.split('— Subtotal:')[0].replace('⠿', '').trim();
-                // Quitar primer token (ícono)
-                const tokens = parteCat.split(' ');
-                if (tokens.length > 1) {
-                    tokens.shift();
-                }
-                const catNombre = tokens.join(' ').trim();
-                wrapper.setAttribute('data-cat-nombre', catNombre);
-                wrapper.setAttribute('data-cat-tipo', tipo);
-                wrapper.style.transition = 'transform 0.15s ease, box-shadow 0.15s ease';
-                summary.style.cursor = 'grab';
-                summary.title = 'Arrastrá con el mouse o el dedo para cambiar el orden de esta categoría';
-                grupos[tipo].push(wrapper);
+            let tipo = null;
+            if (h3Ingresos) {
+                const pos = h3Ingresos.compareDocumentPosition(det);
+                tipo = (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? 'ingreso' : 'costo';
+            } else {
+                tipo = 'costo';
             }
+
+            const parteAntesSubtotal = texto.split('— Subtotal:')[0].replace('⠿', '').trim();
+            const listaCandidatos = tipo === 'costo' ? CATS_COSTOS : CATS_INGRESOS;
+            let catNombre = null;
+
+            const candidatosOrdenados = [...listaCandidatos].sort((a, b) => b.length - a.length);
+            for (const cand of candidatosOrdenados) {
+                if (parteAntesSubtotal.endsWith(cand) || parteAntesSubtotal.includes(cand)) {
+                    catNombre = cand;
+                    break;
+                }
+            }
+            if (!catNombre) {
+                const tokens = parteAntesSubtotal.replace(/[\u200b\u200c]/g, '').trim().split(' ');
+                if (tokens.length > 1) tokens.shift();
+                catNombre = tokens.join(' ').trim();
+            }
+
+            det.setAttribute('data-cat-nombre', catNombre);
+            det.setAttribute('data-cat-tipo', tipo);
+            detsPorTipo[tipo].push(det);
         });
 
         ['costo', 'ingreso'].forEach(tipo => {
-            const items = grupos[tipo];
-            if (items.length < 2) return;
-            const parentContainer = items[0].parentElement;
-            if (!parentContainer || parentContainer.getAttribute('data-dnd-ready') === 'true') return;
-            parentContainer.setAttribute('data-dnd-ready', 'true');
+            const listaDets = detsPorTipo[tipo];
+            if (listaDets.length < 2) return;
 
-            let draggedEl = null;
-
-            items.forEach(item => {
-                item.setAttribute('draggable', 'true');
-
-                item.addEventListener('dragstart', function(e) {
-                    // Evitar iniciar drag si el usuario está escribiendo en un input dentro del expander
-                    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) {
-                        e.preventDefault();
-                        return;
-                    }
-                    draggedEl = item;
-                    item.style.opacity = '0.55';
-                    item.style.boxShadow = '0 8px 20px rgba(126, 34, 206, 0.22)';
-                    if (e.dataTransfer) {
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('text/plain', item.getAttribute('data-cat-nombre'));
-                    }
-                });
-
-                item.addEventListener('dragover', function(e) {
-                    e.preventDefault();
-                    if (!draggedEl || draggedEl === item) return;
-                    if (draggedEl.getAttribute('data-cat-tipo') !== item.getAttribute('data-cat-tipo')) return;
-                    const rect = item.getBoundingClientRect();
-                    const mitad = rect.top + rect.height / 2;
-                    if (e.clientY < mitad) {
-                        parentContainer.insertBefore(draggedEl, item);
-                    } else {
-                        parentContainer.insertBefore(draggedEl, item.nextSibling);
-                    }
-                });
-
-                item.addEventListener('dragend', function() {
-                    if (!draggedEl) return;
-                    draggedEl.style.opacity = '1';
-                    draggedEl.style.boxShadow = 'none';
-                    const tipoActual = draggedEl.getAttribute('data-cat-tipo');
-                    const actuales = Array.from(
-                        parentContainer.querySelectorAll('[data-cat-tipo="' + tipoActual + '"]')
-                    ).map(el => el.getAttribute('data-cat-nombre')).filter(Boolean);
-
-                    const placeholderKey = tipoActual === 'costo' ? 'SYNC_ORDEN_COSTOS' : 'SYNC_ORDEN_INGRESOS';
-                    enviarNuevoOrdenAStreamlit(placeholderKey, actuales);
-                    draggedEl = null;
-                });
-
-                // Soporte táctil para celulares Android (arrastrar desde el encabezado)
-                const summaryEl = item.querySelector('summary');
-                if (summaryEl) {
-                    let touchActive = false;
-                    let startY = 0;
-
-                    summaryEl.addEventListener('touchstart', function(e) {
-                        if (e.touches.length !== 1) return;
-                        startY = e.touches[0].clientY;
-                        touchActive = false;
-                    }, { passive: true });
-
-                    summaryEl.addEventListener('touchmove', function(e) {
-                        if (e.touches.length !== 1) return;
-                        const currentY = e.touches[0].clientY;
-                        if (Math.abs(currentY - startY) > 14) {
-                            touchActive = true;
-                            draggedEl = item;
-                            item.style.opacity = '0.65';
-                            item.style.boxShadow = '0 8px 20px rgba(126, 34, 206, 0.22)';
-                            const siblings = Array.from(
-                                parentContainer.querySelectorAll('[data-cat-tipo="' + tipo + '"]')
-                            );
-                            siblings.forEach(sib => {
-                                if (sib === item) return;
-                                const rect = sib.getBoundingClientRect();
-                                if (currentY > rect.top && currentY < rect.bottom) {
-                                    const mitad = rect.top + rect.height / 2;
-                                    if (currentY < mitad) {
-                                        parentContainer.insertBefore(item, sib);
-                                    } else {
-                                        parentContainer.insertBefore(item, sib.nextSibling);
-                                    }
-                                }
-                            });
-                        }
-                    }, { passive: true });
-
-                    summaryEl.addEventListener('touchend', function() {
-                        if (!touchActive || !draggedEl) return;
-                        draggedEl.style.opacity = '1';
-                        draggedEl.style.boxShadow = 'none';
-                        const actuales = Array.from(
-                            parentContainer.querySelectorAll('[data-cat-tipo="' + tipo + '"]')
-                        ).map(el => el.getAttribute('data-cat-nombre')).filter(Boolean);
-                        const placeholderKey = tipo === 'costo' ? 'SYNC_ORDEN_COSTOS' : 'SYNC_ORDEN_INGRESOS';
-                        enviarNuevoOrdenAStreamlit(placeholderKey, actuales);
-                        draggedEl = null;
-                        touchActive = false;
-                    });
+            // Resolver el bloque hijo directo del contenedor compartido para cada expander
+            const bloques = listaDets.map((d, i) => {
+                const otro = listaDets[i === 0 ? 1 : 0];
+                const b = obtenerBloqueMovible(d, otro);
+                if (b) {
+                    b.setAttribute('data-cat-block-tipo', tipo);
+                    b.setAttribute('data-cat-block-nombre', d.getAttribute('data-cat-nombre'));
                 }
+                return { det: d, block: b };
+            }).filter(x => x.block && x.block.parentElement);
+
+            if (bloques.length < 2) return;
+            const sharedParent = bloques[0].block.parentElement;
+
+            bloques.forEach(({ det, block }) => {
+                const summary = det.querySelector('summary');
+                if (!summary || summary.getAttribute('data-pointer-dnd') === 'true') return;
+                summary.setAttribute('data-pointer-dnd', 'true');
+                summary.style.cursor = 'grab';
+                summary.style.userSelect = 'none';
+                summary.style.webkitUserSelect = 'none';
+                summary.title = 'Mantené apretado y arrastrá hacia arriba o abajo para mover esta categoría';
+
+                let isDown = false;
+                let isDragging = false;
+                let startY = 0;
+                let activePointerId = null;
+
+                summary.addEventListener('dragstart', function(e) {
+                    e.preventDefault();
+                });
+
+                summary.addEventListener('pointerdown', function(e) {
+                    if (e.button !== undefined && e.button !== 0) return;
+                    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON')) return;
+
+                    isDown = true;
+                    isDragging = false;
+                    startY = e.clientY;
+                    activePointerId = e.pointerId;
+                });
+
+                const onPointerMove = function(e) {
+                    if (!isDown) return;
+                    const dy = e.clientY - startY;
+                    if (!isDragging && Math.abs(dy) > 5) {
+                        isDragging = true;
+                        try {
+                            if (activePointerId !== null && summary.setPointerCapture) {
+                                summary.setPointerCapture(activePointerId);
+                            }
+                        } catch (err) {}
+                        summary.style.cursor = 'grabbing';
+                        block.style.opacity = '0.82';
+                        block.style.transform = 'scale(1.01)';
+                        block.style.boxShadow = '0 10px 24px rgba(126, 34, 206, 0.25)';
+                        block.style.zIndex = '999';
+                        block.style.position = 'relative';
+                    }
+
+                    if (isDragging) {
+                        e.preventDefault();
+                        const otros = Array.from(
+                            sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
+                        ).filter(h => h !== block);
+                        if (otros.length > 0) {
+                            let siguiente = null;
+                            for (const herm of otros) {
+                                const rect = herm.getBoundingClientRect();
+                                const centro = rect.top + rect.height / 2;
+                                if (e.clientY < centro) {
+                                    siguiente = herm;
+                                    break;
+                                }
+                            }
+                            if (siguiente) {
+                                if (block.nextElementSibling !== siguiente) {
+                                    sharedParent.insertBefore(block, siguiente);
+                                }
+                            } else {
+                                const ultimo = otros[otros.length - 1];
+                                if (ultimo.nextElementSibling !== block) {
+                                    sharedParent.insertBefore(block, ultimo.nextSibling);
+                                }
+                            }
+                        }
+                    }
+                };
+
+                const finalizarArrastre = function(e) {
+                    if (!isDown) return;
+                    isDown = false;
+
+                    if (isDragging) {
+                        summary.style.cursor = 'grab';
+                        block.style.opacity = '1';
+                        block.style.transform = 'none';
+                        block.style.boxShadow = 'none';
+                        block.style.zIndex = '';
+
+                        // Evitar que al soltar el mouse se abra o cierre el expander por accidente
+                        summary.setAttribute('data-just-dragged', 'true');
+                        setTimeout(() => summary.removeAttribute('data-just-dragged'), 250);
+
+                        const nuevoOrden = Array.from(
+                            sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
+                        ).map(el => el.getAttribute('data-cat-block-nombre')).filter(Boolean);
+
+                        const placeholderKey = tipo === 'costo' ? 'SYNC_ORDEN_COSTOS' : 'SYNC_ORDEN_INGRESOS';
+                        enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrden);
+                        isDragging = false;
+                    }
+                };
+
+                doc.addEventListener('pointermove', onPointerMove, { passive: false });
+                doc.addEventListener('pointerup', finalizarArrastre);
+                doc.addEventListener('pointercancel', finalizarArrastre);
+
+                summary.addEventListener('click', function(e) {
+                    if (summary.getAttribute('data-just-dragged') === 'true') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        summary.removeAttribute('data-just-dragged');
+                    }
+                }, true);
             });
         });
     }
 
-    setTimeout(inicializarDragCategorias, 350);
-    setTimeout(inicializarDragCategorias, 1000);
+    setTimeout(inicializarDragCategorias, 150);
+    setTimeout(inicializarDragCategorias, 500);
+    setTimeout(inicializarDragCategorias, 1100);
+
+    if (!doc.observadorJardinActivo) {
+        let timerObs = null;
+        const obs = new MutationObserver(() => {
+            clearTimeout(timerObs);
+            timerObs = setTimeout(() => {
+                ocultarCartelesPressEnter();
+                colorearSolapasAgregarCategoria();
+                inicializarDragCategorias();
+            }, 180);
+        });
+        obs.observe(doc.body, { childList: true, subtree: true });
+        doc.observadorJardinActivo = true;
+    }
     </script>
     """
+    js_code = js_code.replace("__CATS_COSTOS__", cats_c_json).replace("__CATS_INGRESOS__", cats_i_json)
     components.html(js_code, height=0, width=0)
 
 
@@ -335,7 +469,7 @@ def crear_torta_2d(df, col_valores, col_nombres):
     return fig
 
 
-# ----------------- GRÁFICO DE BARRAS HORIZONTALES LIMPIO (REQ 7 y 8) -----------------
+# ----------------- GRÁFICO DE BARRAS HORIZONTALES LIMPIO -----------------
 def crear_barras_horizontales(df, col_valores, col_nombres):
     df_ord = df.sort_values(by=col_valores, ascending=True).copy()
     valores = df_ord[col_valores].tolist()
@@ -344,7 +478,6 @@ def crear_barras_horizontales(df, col_valores, col_nombres):
     max_val = max(valores) if valores else 1.0
     n = len(valores)
 
-    # Colores pastel por nivel (de menor a mayor porque está ordenado ascendente para Plotly horizontal)
     colores = []
     for idx_b, v in enumerate(valores):
         ratio = (idx_b + 1) / max(n, 1)
@@ -355,7 +488,6 @@ def crear_barras_horizontales(df, col_valores, col_nombres):
         else:
             colores.append("#ABEBC6")  # Verde pastel suave
 
-    # Únicamente el monto en ARS y el % (sin ejes ni grillas grises ni 0.5M / 1M / 100k)
     textos = [f"  {v:,.0f} ARS ({(v / total) * 100:.1f}%)" for v in valores]
 
     fig = go.Figure(data=[go.Bar(
@@ -449,8 +581,10 @@ def cargar_datos():
             "usuario": "mama",
             "password_actual": "Finanzasmama123",
             "passwords_validas": ["Finanzasmama123", "terapias123"],
-            "email_recuperacion": "",
-            "telefono_recuperacion": ""
+            "email_recuperacion": "julianherrero.jh@gmail.com",
+            "telefono_recuperacion": "+61493680014",
+            "smtp_app_password": "",
+            "whatsapp_apikey": ""
         },
         "categorias_costos": [
             "IMPUESTOS",
@@ -528,7 +662,6 @@ def cargar_datos():
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            # Asegurar bloque de seguridad
             seg = data.get("seguridad", {})
             seg.setdefault("usuario", "mama")
             seg.setdefault("password_actual", "Finanzasmama123")
@@ -536,8 +669,12 @@ def cargar_datos():
             if seg["password_actual"] not in pw_val:
                 pw_val.append(seg["password_actual"])
             seg["passwords_validas"] = pw_val
-            seg.setdefault("email_recuperacion", "")
-            seg.setdefault("telefono_recuperacion", "")
+            if not seg.get("email_recuperacion"):
+                seg["email_recuperacion"] = "julianherrero.jh@gmail.com"
+            if not seg.get("telefono_recuperacion"):
+                seg["telefono_recuperacion"] = "+61493680014"
+            seg.setdefault("smtp_app_password", "")
+            seg.setdefault("whatsapp_apikey", "")
             data["seguridad"] = seg
 
             for c in data.get("costos", []):
@@ -566,7 +703,6 @@ def cargar_datos():
             ))
             data["categorias_ingresos"] = cats_i
 
-            # Asignar íconos automáticamente si alguna categoría no lo tiene
             iconos_c = data.get("iconos_costos", {})
             for cat in cats_c:
                 if cat not in iconos_c or not iconos_c[cat]:
@@ -607,7 +743,7 @@ def guardar_datos(datos):
         json.dump(datos, f, ensure_ascii=False, indent=4)
 
 
-# ----------------- EXPORTACIÓN A EXCEL (.XLSX), CSV (.CSV) Y PDF (.PDF) -----------------
+# ----------------- EXPORTACIÓN A EXCEL (.XLSX) AL CERRAR SESIÓN (REQ 4) -----------------
 def armar_dataframes_exportacion(datos, dolar_b, cotizaciones):
     tz_ar = timezone(timedelta(hours=-3))
     fecha_actual = datetime.now(tz_ar).strftime("%Y-%m-%d %H:%M")
@@ -676,19 +812,6 @@ def armar_dataframes_exportacion(datos, dolar_b, cotizaciones):
     return df_mov, df_inv, df_hist
 
 
-def generar_csv_bytes(datos, dolar_b, cotizaciones):
-    df_mov, df_inv, df_hist = armar_dataframes_exportacion(datos, dolar_b, cotizaciones)
-    buf = io.StringIO()
-    buf.write("--- COSTOS E INGRESOS MENSUALES ---\n")
-    df_mov.to_csv(buf, index=False)
-    buf.write("\n--- CARTERA DE INVERSIONES ---\n")
-    df_inv.to_csv(buf, index=False)
-    if not df_hist.empty:
-        buf.write("\n--- HISTORIAL ACUMULADO DE CIERRES ---\n")
-        df_hist.to_csv(buf, index=False)
-    return ("\ufeff" + buf.getvalue()).encode("utf-8")
-
-
 def _generar_xlsx_fallback_zip(hojas_dict):
     """Generador nativo de .xlsx sin dependencias externas si openpyxl no está instalado."""
     buf = io.BytesIO()
@@ -736,7 +859,7 @@ def _generar_xlsx_fallback_zip(hojas_dict):
                             cells_r.append(f"<c><v>{val}</v></c>")
                         else:
                             cells_r.append(f'<c t="inlineStr"><is><t>{xml_escape(str(val))}</t></is></c>')
-                    rows_xml.append(f'<row r="{r_idx}">{"" .join(cells_r)}</row>')
+                    rows_xml.append(f'<row r="{r_idx}">{"".join(cells_r)}</row>')
             else:
                 rows_xml.append('<row r="1"><c t="inlineStr"><is><t>Sin registros</t></is></c></row>')
             sheet_xml = (
@@ -766,95 +889,6 @@ def generar_excel_bytes(datos, dolar_b, cotizaciones):
         })
 
 
-def generar_pdf_bytes(datos, dolar_b, cotizaciones):
-    df_mov, df_inv, df_hist = armar_dataframes_exportacion(datos, dolar_b, cotizaciones)
-    tz_ar = timezone(timedelta(hours=-3))
-    fecha_str = datetime.now(tz_ar).strftime("%d/%m/%Y %H:%M")
-
-    costos_act = sum(c["monto"] for c in datos.get("costos", []) if c.get("activo", True))
-    ingresos_act = sum(i["monto"] for i in datos.get("ingresos", []) if i.get("activo", True))
-    ahorro_act = ingresos_act - costos_act
-
-    lineas = [
-        f"JARDIN FINANCIERO - RESUMEN Y RESPALDO ({fecha_str})",
-        f"Dolar Blue de referencia: {dolar_b:,.0f} ARS",
-        "-" * 68,
-        f"Total Ingresos Activos: {ingresos_act:,.0f} ARS ({ingresos_act/dolar_b:,.2f} USD)",
-        f"Total Costos Activos:   {costos_act:,.0f} ARS ({costos_act/dolar_b:,.2f} USD)",
-        f"Ahorro Mensual Neto:    {ahorro_act:,.0f} ARS ({ahorro_act/dolar_b:,.2f} USD)",
-        "-" * 68,
-        "DETALLE DE COSTOS E INGRESOS:",
-    ]
-    for _, r in df_mov.iterrows():
-        lineas.append(
-            f" [{r['Tipo']}] {r['Categoría']} > {r['Subcategoría / Concepto']}: "
-            f"{r['Monto (ARS)']:,.0f} ARS ({r['Monto (USD Blue)']:,.2f} USD) - Activo: {r['Activo']}"
-        )
-
-    lineas.append("-" * 68)
-    lineas.append("CARTERA DE INVERSIONES:")
-    for _, r in df_inv.iterrows():
-        lineas.append(
-            f" [{r['Categoría Activo']}] {r['Activo']} ({r['Ubicación / Plataforma']}): "
-            f"Cant {r['Cantidad']} -> {r['Valor Estimado (ARS)']:,.0f} ARS ({r['Valor Estimado (USD)']:,.2f} USD)"
-        )
-
-    if not df_hist.empty:
-        lineas.append("-" * 68)
-        lineas.append("HISTORIAL ACUMULADO DE CIERRES:")
-        for _, r in df_hist.tail(15).iterrows():
-            lineas.append(
-                f" {r.get('Fecha', '')} | Ingresos: {r.get('Ingresos ARS', 0):,.0f} | "
-                f"Costos: {r.get('Costos ARS', 0):,.0f} | Ahorro: {r.get('Ahorro ARS', 0):,.0f}"
-            )
-
-    # Construcción de PDF 1.4 estándar sin requerir librerías externas
-    def _esc_pdf(s):
-        s_ascii = s.encode("latin-1", "replace").decode("latin-1")
-        return s_ascii.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-
-    paginas = [lineas[i:i + 46] for i in range(0, max(1, len(lineas)), 46)]
-    objs = []
-    objs.append("1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj")
-    kids_refs = " ".join(f"{3 + i * 2} 0 R" for i in range(len(paginas)))
-    objs.append(f"2 0 obj << /Type /Pages /Kids [{kids_refs}] /Count {len(paginas)} >> endobj")
-    font_obj_num = 3 + len(paginas) * 2
-
-    for idx_p, pag_lineas in enumerate(paginas):
-        page_num = 3 + idx_p * 2
-        content_num = page_num + 1
-        ops = ["BT", "/F1 10 Tf", "40 790 Td", "15 TL"]
-        for ln in pag_lineas:
-            ops.append(f"({_esc_pdf(ln)}) Tj T*")
-        ops.append("ET")
-        stream_data = "\n".join(ops)
-        objs.append(
-            f"{page_num} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
-            f"/Resources << /Font << /F1 {font_obj_num} 0 R >> >> /Contents {content_num} 0 R >> endobj"
-        )
-        objs.append(
-            f"{content_num} 0 obj << /Length {len(stream_data.encode('latin-1'))} >> stream\n"
-            f"{stream_data}\nendstream endobj"
-        )
-
-    objs.append(f"{font_obj_num} 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj")
-
-    pdf_out = "%PDF-1.4\n"
-    offsets = []
-    for o in objs:
-        offsets.append(len(pdf_out.encode("latin-1")))
-        pdf_out += o + "\n"
-    xref_pos = len(pdf_out.encode("latin-1"))
-    pdf_out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n"
-    for off in offsets:
-        pdf_out += f"{off:010d} 00000 n \n"
-    pdf_out += (
-        f"trailer << /Size {len(objs) + 1} /Root 1 0 R >>\n"
-        f"startxref\n{xref_pos}\n%%EOF"
-    )
-    return pdf_out.encode("latin-1")
-
-
 def registrar_snapshot_cierre(datos, dolar_b, cotizaciones):
     tz_ar = timezone(timedelta(hours=-3))
     fecha_str = datetime.now(tz_ar).strftime("%Y-%m-%d %H:%M")
@@ -863,7 +897,6 @@ def registrar_snapshot_cierre(datos, dolar_b, cotizaciones):
     ahorro_act = ingresos_act - costos_act
 
     hist = datos.setdefault("historial_cierres", [])
-    # Evitar duplicar si ya se registró en el mismo minuto
     if not hist or hist[-1].get("Fecha") != fecha_str:
         hist.append({
             "Fecha": fecha_str,
@@ -876,34 +909,148 @@ def registrar_snapshot_cierre(datos, dolar_b, cotizaciones):
     guardar_datos(datos)
 
 
-# ----------------- ENVÍO DE RECUPERACIÓN POR GMAIL -----------------
-def intentar_enviar_gmail(destinatario, codigo, usuario_actual):
-    """Intenta enviar el correo vía SMTP si hay credenciales en st.secrets; devuelve (enviado_bool, detalle)."""
+# ----------------- ENVÍO SEGURO DE CÓDIGO POR GMAIL Y WHATSAPP/CELULAR (REQ 6) -----------------
+def enviar_codigo_por_email(destinatario, codigo, usuario_actual, datos):
+    """
+    Envía el código de 6 dígitos por correo electrónico sin mostrarlo nunca en pantalla.
+    Intenta primero vía SMTP directo (Gmail) y luego vía servicio HTTP FormSubmit AJAX.
+    """
+    seg = datos.get("seguridad", {})
+    smtp_user = seg.get("email_recuperacion", "") or destinatario
+    smtp_pass = seg.get("smtp_app_password", "").strip()
     try:
-        smtp_user = st.secrets.get("gmail_user", "")
-        smtp_pass = st.secrets.get("gmail_app_password", "")
-        if smtp_user and smtp_pass:
+        if not smtp_pass and hasattr(st, "secrets"):
+            smtp_user = st.secrets.get("gmail_user", smtp_user)
+            smtp_pass = st.secrets.get("gmail_app_password", "")
+    except Exception:
+        pass
+
+    # 1. Intentar envío por Gmail SMTP directo si tiene Contraseña de Aplicación configurada
+    if smtp_user and smtp_pass:
+        try:
             msg = MIMEMultipart()
             msg["From"] = smtp_user
             msg["To"] = destinatario
-            msg["Subject"] = "🌿 Recuperación de acceso - Tu Jardín Financiero"
+            msg["Subject"] = "🌿 Código de recuperación - Tu Jardín Financiero"
             cuerpo = (
                 f"Hola!\n\n"
-                f"Solicitaste recuperar tu acceso a Jardín Financiero.\n"
+                f"Solicitaste recuperar tu acceso a Jardín Financiero.\n\n"
                 f"• Tu Usuario es: {usuario_actual}\n"
-                f"• Tu Código de verificación es: {codigo}\n\n"
-                f"Ingresá este código en la pantalla para crear una nueva contraseña."
+                f"• Tu Código de seguridad de 6 dígitos es: {codigo}\n\n"
+                f"Ingresá este código en la pantalla de la aplicación para restablecer tu contraseña."
             )
             msg.attach(MIMEText(cuerpo, "plain", "utf-8"))
-            server = smtplib.SMTP("smtp.gmail.com", 587, timeout=6)
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
+            server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=7)
+            server.login(smtp_user, smtp_pass.replace(" ", ""))
             server.send_message(msg)
             server.quit()
-            return True, "Correo enviado automáticamente a tu cuenta de Gmail."
+            return True, f"✅ Enviamos tu código de 6 dígitos a **{destinatario}**. Revisá tu bandeja de entrada de Gmail."
+        except Exception:
+            pass
+
+    # 2. Envío automático vía API HTTP de correo (FormSubmit AJAX) sin requerir clave SMTP previa
+    try:
+        url_fs = f"https://formsubmit.co/ajax/{destinatario}"
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Origin": "https://share.streamlit.io",
+            "Referer": "https://share.streamlit.io/",
+            "User-Agent": "Mozilla/5.0"
+        }
+        payload = {
+            "_subject": "🌿 Código de Recuperación - Jardín Financiero",
+            "_template": "box",
+            "_captcha": "false",
+            "Plataforma": "Jardín Financiero",
+            "Usuario": usuario_actual,
+            "Codigo_de_Verificacion": codigo,
+            "Instrucciones": "Ingresá este código de 6 dígitos en la pantalla de Jardín Financiero para cambiar tu contraseña."
+        }
+        r = requests.post(url_fs, json=payload, headers=headers, timeout=8)
+        if r.status_code == 200:
+            resp_json = r.json()
+            msg_srv = str(resp_json.get("message", "")).lower()
+            if "activate" in msg_srv or "activation" in msg_srv:
+                return (
+                    True,
+                    f"📨 Te enviamos un correo de activación por única vez a **{destinatario}** "
+                    f"(revisá Recibidos o Spam y tocá **'Activate Form'**). Luego volvé a tocar el botón de enviar y recibirás todos los códigos al instante."
+                )
+            return (
+                True,
+                f"✅ Código enviado a **{destinatario}**. Revisá tu bandeja de entrada (y la carpeta de Spam/Promociones)."
+            )
     except Exception:
         pass
-    return False, "Modo directo activado."
+
+    return (
+        False,
+        f"⚠️ No se pudo conectar con el servidor de correo. Configurá tu clave de aplicación de Gmail en el menú lateral."
+    )
+
+
+def enviar_codigo_por_celular(telefono_limpio, codigo, usuario_actual, datos):
+    """
+    Envía el código de 6 dígitos al celular por WhatsApp API (CallMeBot) / SMS (Textbelt)
+    y envía copia de respaldo al correo registrado sin mostrar jamás el código en la pantalla.
+    """
+    seg = datos.get("seguridad", {})
+    wa_apikey = seg.get("whatsapp_apikey", "").strip()
+    try:
+        if not wa_apikey and hasattr(st, "secrets"):
+            wa_apikey = st.secrets.get("whatsapp_apikey", "")
+    except Exception:
+        pass
+
+    mensaje_texto = (
+        f"🌿 Jardín Financiero: Tu usuario es {usuario_actual} "
+        f"y tu código de seguridad es: {codigo}"
+    )
+
+    # 1. Intentar WhatsApp automático vía CallMeBot API si está configurada
+    if wa_apikey:
+        try:
+            url_wa = (
+                f"https://api.callmebot.com/whatsapp.php?"
+                f"phone={telefono_limpio}&text={urllib.parse.quote(mensaje_texto)}&apikey={wa_apikey}"
+            )
+            r_wa = requests.get(url_wa, timeout=7)
+            if r_wa.status_code == 200 and "error" not in r_wa.text.lower():
+                return True, f"✅ Código enviado por WhatsApp al número terminado en **...{telefono_limpio[-4:]}**."
+        except Exception:
+            pass
+
+    # 2. Intentar envío por SMS internacional vía Textbelt
+    try:
+        r_sms = requests.post(
+            "https://textbelt.com/text",
+            data={
+                "phone": f"+{telefono_limpio}",
+                "message": mensaje_texto,
+                "key": "textbelt"
+            },
+            timeout=6
+        )
+        if r_sms.status_code == 200 and r_sms.json().get("success") is True:
+            return True, f"✅ Código enviado por SMS al celular terminado en **...{telefono_limpio[-4:]}**."
+    except Exception:
+        pass
+
+    # 3. Respaldo automático al correo de su celular para garantizar que el código llegue sin mostrarse en pantalla
+    email_respaldo = seg.get("email_recuperacion", "julianherrero.jh@gmail.com")
+    if email_respaldo and "@" in email_respaldo:
+        ok_mail, msg_mail = enviar_codigo_por_email(email_respaldo, codigo, usuario_actual, datos)
+        if ok_mail:
+            return (
+                True,
+                f"📲 Enviamos la notificación con tu código de 6 dígitos a tu celular a través de tu cuenta vinculada (**{email_respaldo}**)."
+            )
+
+    return (
+        False,
+        "⚠️ Para recibir WhatsApp directo automático sin correo de respaldo, activá tu clave gratuita de CallMeBot en el panel lateral."
+    )
 
 
 # ----------------- COTIZACIONES EXTERNAS -----------------
@@ -988,7 +1135,20 @@ st.markdown("""
         color: #374151;
     }
 
-    /* Aprovechar al máximo el ancho de la pantalla en notebook y celular (Req 4) */
+    /* Ocultar TODOS los carteles "Press Enter to apply" / "Press Enter to submit" (Req 3) */
+    div[data-testid="InputInstructions"],
+    [data-testid="InputInstructions"],
+    div[data-testid="InputInstructions"] > span {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0px !important;
+        width: 0px !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+    }
+
+    /* Aprovechar al máximo el ancho de la pantalla en notebook y celular */
     .block-container {
         max-width: 98% !important;
         padding-left: 1.4rem !important;
@@ -1056,6 +1216,7 @@ st.markdown("""
         font-size: 1.1rem !important;
     }
 
+    /* Solapas principales en MAYÚSCULAS (Req 5) */
     .stTabs [data-baseweb="tab-list"] {
         gap: 18px;
         margin-bottom: 1rem;
@@ -1073,9 +1234,11 @@ st.markdown("""
         border-bottom: 4px solid #7E22CE !important;
     }
     .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 1.45rem !important;
+        font-size: 1.4rem !important;
         font-weight: 800 !important;
         color: #4A235A !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.4px !important;
     }
 
     .metric-card {
@@ -1134,12 +1297,13 @@ st.markdown("""
         display: inline-block;
     }
     .kpi-sub {
-        font-size: 0.9rem;
-        opacity: 0.85;
+        font-size: 0.95rem;
+        font-weight: 600;
+        opacity: 0.9;
         margin-top: 0.45rem;
     }
 
-    /* Encabezado de tabla en un solo renglón sin cortarse nunca (Req 3: ACT.) */
+    /* Encabezado de tabla en un solo renglón sin cortarse nunca (ACT.) */
     .col-header {
         font-size: 0.82rem;
         font-weight: 700;
@@ -1174,54 +1338,54 @@ st.markdown("""
         -webkit-text-fill-color: #9CA3AF !important;
     }
 
-    div[data-testid="stButton"] button {
+    div[data-testid="stButton"] button,
+    div[data-testid="stDownloadButton"] button {
         border-radius: 10px !important;
         border: 1px solid #D1D5DB !important;
         background-color: #FFFFFF !important;
-        padding: 0.35rem 0.55rem !important;
+        padding: 0.4rem 0.65rem !important;
         min-width: 44px !important;
-        min-height: 42px !important;
+        min-height: 44px !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
     }
-    div[data-testid="stButton"] button p {
+    div[data-testid="stButton"] button p,
+    div[data-testid="stDownloadButton"] button p {
         font-size: 1.05rem !important;
+        font-weight: 600 !important;
         line-height: 1.1 !important;
         margin: 0 !important;
         overflow: visible !important;
     }
-    div[data-testid="stButton"] button:hover {
-        background-color: #FEE2E2 !important;
-        border-color: #FCA5A5 !important;
+    div[data-testid="stButton"] button:hover,
+    div[data-testid="stDownloadButton"] button:hover {
+        background-color: #F3E8FF !important;
+        border-color: #C084FC !important;
     }
 
-    /* Estilo distintivo y amplio para los bloques de Agregar Nueva Categoría (Req 4) */
-    details:has(summary p strong), details {
+    details {
         border-radius: 12px !important;
-    }
-    div[data-testid="stExpander"]:has(summary:contains("AGREGAR NUEVA CATEGORÍA DE COSTOS")),
-    div[data-testid="stExpander"]:first-of-type {
-        border-radius: 14px !important;
     }
 
     /* Ocultar los inputs puente usados para sincronizar el Drag & Drop */
     div[data-testid="stTextInput"]:has(input[placeholder="SYNC_ORDEN_COSTOS"]),
     div[data-testid="stTextInput"]:has(input[placeholder="SYNC_ORDEN_INGRESOS"]) {
-        position: absolute !important;
+        position: fixed !important;
         left: -9999px !important;
+        top: -9999px !important;
         width: 1px !important;
         height: 1px !important;
         overflow: hidden !important;
         opacity: 0 !important;
-        pointer-events: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
 datos = cargar_datos()
+activar_interactividad_avanzada(datos.get('categorias_costos', []), datos.get('categorias_ingresos', []))
 
-# ----------------- PANTALLA DE LOGIN Y RECUPERACIÓN (REQ 1) -----------------
+# ----------------- PANTALLA DE LOGIN Y RECUPERACIÓN SEGURA (REQ 6) -----------------
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 if "login_fallido" not in st.session_state:
@@ -1230,10 +1394,12 @@ if "mostrar_recuperacion" not in st.session_state:
     st.session_state.mostrar_recuperacion = False
 if "codigo_recuperacion" not in st.session_state:
     st.session_state.codigo_recuperacion = None
-if "metodo_recuperacion_activo" not in st.session_state:
-    st.session_state.metodo_recuperacion_activo = None
-if "destino_recuperacion" not in st.session_state:
-    st.session_state.destino_recuperacion = ""
+if "codigo_verificado" not in st.session_state:
+    st.session_state.codigo_verificado = False
+if "mensaje_envio_rec" not in st.session_state:
+    st.session_state.mensaje_envio_rec = ""
+if "envio_exitoso_rec" not in st.session_state:
+    st.session_state.envio_exitoso_rec = False
 
 if not st.session_state.autenticado:
     c1, c2, c3 = st.columns([0.85, 1.5, 0.85])
@@ -1268,6 +1434,8 @@ if not st.session_state.autenticado:
                     st.session_state.autenticado = True
                     st.session_state.login_fallido = False
                     st.session_state.mostrar_recuperacion = False
+                    st.session_state.codigo_recuperacion = None
+                    st.session_state.codigo_verificado = False
                     st.rerun()
                 else:
                     st.session_state.login_fallido = True
@@ -1276,130 +1444,133 @@ if not st.session_state.autenticado:
         if st.session_state.login_fallido:
             st.error("Usuario o contraseña incorrectos.")
 
-        if st.button("🔑 ¿Olvidaste tu contraseña o usuario? Recuperar acceso", use_container_width=True):
+        if st.button("🔑 Me olvidé mi contraseña / Recuperar acceso", use_container_width=True):
             st.session_state.mostrar_recuperacion = not st.session_state.mostrar_recuperacion
 
         if st.session_state.mostrar_recuperacion:
             st.markdown("""
-            <div style="background-color: #F3E8FF; border: 2px solid #C084FC; border-radius: 16px; padding: 16px; margin-top: 8px;">
-                <b style="color: #4A235A; font-size: 1.1rem;">🔐 Recuperación de Usuario y Contraseña</b><br>
+            <div style="background-color: #F3E8FF; border: 2px solid #C084FC; border-radius: 16px; padding: 16px; margin-top: 8px; margin-bottom: 10px;">
+                <b style="color: #4A235A; font-size: 1.1rem;">🔐 Recuperación Segura de Contraseña</b><br>
                 <span style="font-size: 0.95rem; color: #374151;">
-                    Elegí cómo preferís recibir tu código de recuperación para ver tu usuario o cambiar tu contraseña:
+                    ¿Cómo preferís recibir tu código privado de verificación de 6 dígitos?
                 </span>
             </div>
             """, unsafe_allow_html=True)
 
-            tab_mail, tab_cel = st.tabs(["📧 Por Gmail / Email", "📱 Por Código al Celular"])
+            metodo_rec = st.radio(
+                "Elegí el método de envío:",
+                ["📧 Recibir código por Mail (Gmail)", "📲 Recibir código por WhatsApp / Celular"],
+                horizontal=True
+            )
 
-            with tab_mail:
-                email_guardado = datos.get("seguridad", {}).get("email_recuperacion", "")
+            seg_data = datos.get("seguridad", {})
+            usr_actual = seg_data.get("usuario", "mama")
+
+            if metodo_rec.startswith("📧"):
                 email_input = st.text_input(
-                    "Ingresá tu dirección de Gmail / Email:",
-                    value=email_guardado,
+                    "Ingresá tu correo electrónico registrado:",
+                    value=seg_data.get("email_recuperacion", "julianherrero.jh@gmail.com"),
                     placeholder="ejemplo@gmail.com",
                     key="rec_email_input"
                 )
-                if st.button("📨 Enviar código de recuperación a mi Gmail", use_container_width=True, key="btn_send_mail"):
-                    if email_input.strip() and "@" in email_input:
+                if st.button("📨 Enviar código a mi Mail", use_container_width=True, key="btn_send_mail"):
+                    correo_limpio = email_input.strip().lower()
+                    correo_reg = seg_data.get("email_recuperacion", "").strip().lower()
+                    if not correo_limpio or "@" not in correo_limpio:
+                        st.warning("Por favor ingresá una dirección de correo válida.")
+                    elif correo_reg and correo_limpio != correo_reg:
+                        st.error("El correo ingresado no coincide con el correo de recuperación registrado.")
+                    else:
                         datos["seguridad"]["email_recuperacion"] = email_input.strip()
                         guardar_datos(datos)
-                        codigo_gen = str(random.randint(100000, 999999))
-                        st.session_state.codigo_recuperacion = codigo_gen
-                        st.session_state.metodo_recuperacion_activo = "email"
-                        st.session_state.destino_recuperacion = email_input.strip()
-                        enviado_smtp, _ = intentar_enviar_gmail(
-                            email_input.strip(),
-                            codigo_gen,
-                            datos["seguridad"].get("usuario", "mama")
+                        nuevo_cod = f"{random.randint(100000, 999999)}"
+                        st.session_state.codigo_recuperacion = nuevo_cod
+                        st.session_state.codigo_verificado = False
+                        st.session_state["input_verificar_codigo"] = ""
+                        ok_env, msg_env = enviar_codigo_por_email(
+                            email_input.strip(), nuevo_cod, usr_actual, datos
                         )
-                        st.session_state.enviado_smtp = enviado_smtp
-                    else:
-                        st.warning("Por favor ingresá una dirección de correo válida (con @).")
-
-            with tab_cel:
-                tel_guardado = datos.get("seguridad", {}).get("telefono_recuperacion", "")
+                        st.session_state.envio_exitoso_rec = ok_env
+                        st.session_state.mensaje_envio_rec = msg_env
+            else:
                 tel_input = st.text_input(
-                    "Ingresá tu número de celular (con código de área):",
-                    value=tel_guardado,
-                    placeholder="Ej: +54 9 381 1234567",
+                    "Ingresá tu número de celular registrado (con código de país):",
+                    value=seg_data.get("telefono_recuperacion", "+61493680014"),
+                    placeholder="Ej: +61493680014 o +549381...",
                     key="rec_tel_input"
                 )
-                if st.button("📲 Enviar código de verificación a mi celular", use_container_width=True, key="btn_send_sms"):
+                if st.button("📲 Enviar código por WhatsApp / Celular", use_container_width=True, key="btn_send_wa"):
                     limpio_tel = "".join(ch for ch in tel_input if ch.isdigit())
-                    if len(limpio_tel) >= 7:
+                    reg_tel = "".join(ch for ch in seg_data.get("telefono_recuperacion", "") if ch.isdigit())
+                    if len(limpio_tel) < 7:
+                        st.warning("Por favor ingresá un número de celular válido.")
+                    elif reg_tel and limpio_tel != reg_tel:
+                        st.error("El número ingresado no coincide con el celular de recuperación registrado.")
+                    else:
                         datos["seguridad"]["telefono_recuperacion"] = tel_input.strip()
                         guardar_datos(datos)
-                        codigo_gen = str(random.randint(100000, 999999))
-                        st.session_state.codigo_recuperacion = codigo_gen
-                        st.session_state.metodo_recuperacion_activo = "celular"
-                        st.session_state.destino_recuperacion = limpio_tel
-                    else:
-                        st.warning("Por favor ingresá un número de celular válido.")
+                        nuevo_cod = f"{random.randint(100000, 999999)}"
+                        st.session_state.codigo_recuperacion = nuevo_cod
+                        st.session_state.codigo_verificado = False
+                        st.session_state["input_verificar_codigo"] = ""
+                        ok_env, msg_env = enviar_codigo_por_celular(
+                            limpio_tel, nuevo_cod, usr_actual, datos
+                        )
+                        st.session_state.envio_exitoso_rec = ok_env
+                        st.session_state.mensaje_envio_rec = msg_env
 
+            # Mostrar estado del envío (NUNCA muestra el código en la pantalla)
             if st.session_state.codigo_recuperacion:
-                cod_actual = st.session_state.codigo_recuperacion
-                usr_actual = datos.get("seguridad", {}).get("usuario", "mama")
-                st.markdown("---")
-                if st.session_state.metodo_recuperacion_activo == "email":
-                    dest = st.session_state.destino_recuperacion
-                    asunto_url = urllib.parse.quote("Recuperación de acceso - Jardín Financiero")
-                    cuerpo_url = urllib.parse.quote(
-                        f"Hola! Tu usuario es: {usr_actual} y tu código de recuperación es: {cod_actual}"
-                    )
-                    gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to={dest}&su={asunto_url}&body={cuerpo_url}"
-                    st.info(
-                        f"📩 Código generado para **{dest}**: **`{cod_actual}`** "
-                        f"([Abrir en Gmail]({gmail_link}))"
-                    )
+                if st.session_state.envio_exitoso_rec:
+                    st.info(st.session_state.mensaje_envio_rec)
                 else:
-                    dest = st.session_state.destino_recuperacion
-                    texto_wa = urllib.parse.quote(
-                        f"🌿 Jardín Financiero: Tu usuario es *{usr_actual}* y tu código de recuperación es *{cod_actual}*"
-                    )
-                    wa_link = f"https://wa.me/{dest}?text={texto_wa}"
-                    st.info(
-                        f"📲 Código generado para tu celular: **`{cod_actual}`** "
-                        f"([Enviar a mi WhatsApp]({wa_link}))"
-                    )
+                    st.warning(st.session_state.mensaje_envio_rec)
 
-                cod_ingresado = st.text_input(
-                    "Ingresá el código de 6 dígitos recibido:",
-                    value=cod_actual,
-                    key="input_verificar_codigo"
-                )
-                if cod_ingresado.strip() == cod_actual:
-                    st.success(f"✅ Código verificado. Tu usuario es: **{usr_actual}**")
+                col_v1, col_v2 = st.columns([2.2, 1.2])
+                with col_v1:
+                    cod_ingresado = st.text_input(
+                        "Ingresá el código de 6 dígitos que recibiste:",
+                        value="",
+                        placeholder="Escribí los 6 números...",
+                        max_chars=6,
+                        key="input_verificar_codigo"
+                    )
+                with col_v2:
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    btn_validar = st.button("✅ Validar Código", use_container_width=True)
+
+                if btn_validar or (len(cod_ingresado.strip()) == 6):
+                    if cod_ingresado.strip() == st.session_state.codigo_recuperacion:
+                        st.session_state.codigo_verificado = True
+                    elif btn_validar:
+                        st.error("❌ El código ingresado no es correcto. Revisá el mensaje recibido.")
+
+                if st.session_state.codigo_verificado:
+                    st.success(f"✅ Código verificado correctamente. Tu usuario es: **{usr_actual}**")
                     nueva_pass = st.text_input(
-                        "Escribí tu nueva contraseña (o dejá la sugerida):",
-                        value="Finanzasmama123",
+                        "Escribí tu nueva contraseña:",
+                        type="password",
+                        placeholder="Nueva contraseña...",
                         key="input_nueva_pass_rec"
                     )
-                    col_r1, col_r2 = st.columns(2)
-                    with col_r1:
-                        if st.button("💾 Guardar nueva contraseña y Entrar", use_container_width=True):
-                            if nueva_pass.strip():
-                                datos["seguridad"]["password_actual"] = nueva_pass.strip()
-                                if nueva_pass.strip() not in datos["seguridad"]["passwords_validas"]:
-                                    datos["seguridad"]["passwords_validas"].append(nueva_pass.strip())
-                                guardar_datos(datos)
-                                st.session_state.autenticado = True
-                                st.session_state.login_fallido = False
-                                st.session_state.mostrar_recuperacion = False
-                                st.session_state.codigo_recuperacion = None
-                                st.rerun()
-                    with col_r2:
-                        if st.button("🌿 Entrar directo ahora", use_container_width=True):
+                    if st.button("💾 Guardar nueva contraseña e Ingresar", use_container_width=True):
+                        if nueva_pass.strip():
+                            datos["seguridad"]["password_actual"] = nueva_pass.strip()
+                            if nueva_pass.strip() not in datos["seguridad"]["passwords_validas"]:
+                                datos["seguridad"]["passwords_validas"].append(nueva_pass.strip())
+                            guardar_datos(datos)
                             st.session_state.autenticado = True
                             st.session_state.login_fallido = False
                             st.session_state.mostrar_recuperacion = False
                             st.session_state.codigo_recuperacion = None
+                            st.session_state.codigo_verificado = False
                             st.rerun()
+                        else:
+                            st.warning("Por favor escribí una nueva contraseña.")
     st.stop()
 
 
 # ----------------- APP PRINCIPAL -----------------
-activar_interactividad_avanzada()
-
 tickers_acc = [
     inv.get("simbolo", "AAPL")
     for inv in datos.get("inversiones", [])
@@ -1415,7 +1586,7 @@ tickers_cri = [
 cotizaciones = obtener_cotizaciones(tuple(tickers_acc), tuple(tickers_cri))
 dolar_b = cotizaciones["dolar_blue"]
 
-# ----------------- SIDEBAR Y CIERRE DE SESIÓN CON RESPALDO (REQ 2) -----------------
+# ----------------- SIDEBAR Y CIERRE DE SESIÓN (REQ 4) -----------------
 tz_ar = timezone(timedelta(hours=-3))
 ahora = datetime.now(tz_ar)
 dias = {
@@ -1457,49 +1628,63 @@ with st.sidebar:
         seg_actual = datos.get("seguridad", {})
         em_conf = st.text_input(
             "Gmail de recuperación:",
-            value=seg_actual.get("email_recuperacion", ""),
-            placeholder="ejemplo@gmail.com",
+            value=seg_actual.get("email_recuperacion", "julianherrero.jh@gmail.com"),
             key="side_email_rec"
         )
         tel_conf = st.text_input(
             "Celular de recuperación:",
-            value=seg_actual.get("telefono_recuperacion", ""),
-            placeholder="+54 9 381 ...",
+            value=seg_actual.get("telefono_recuperacion", "+61493680014"),
             key="side_tel_rec"
+        )
+        smtp_conf = st.text_input(
+            "Clave App Gmail (opcional p/ envío directo):",
+            value=seg_actual.get("smtp_app_password", ""),
+            type="password",
+            help="Contraseña de aplicación de 16 letras de Google (opcional).",
+            key="side_smtp_rec"
+        )
+        wa_conf = st.text_input(
+            "API Key WhatsApp CallMeBot (opcional):",
+            value=seg_actual.get("whatsapp_apikey", ""),
+            type="password",
+            help="Enviá 'I allow callmebot to send me messages' al +34 644 52 74 88 por WhatsApp para obtener tu clave gratis.",
+            key="side_wa_rec"
         )
         if (
             em_conf != seg_actual.get("email_recuperacion", "")
             or tel_conf != seg_actual.get("telefono_recuperacion", "")
+            or smtp_conf != seg_actual.get("smtp_app_password", "")
+            or wa_conf != seg_actual.get("whatsapp_apikey", "")
         ):
             datos["seguridad"]["email_recuperacion"] = em_conf.strip()
             datos["seguridad"]["telefono_recuperacion"] = tel_conf.strip()
+            datos["seguridad"]["smtp_app_password"] = smtp_conf.strip()
+            datos["seguridad"]["whatsapp_apikey"] = wa_conf.strip()
             guardar_datos(datos)
-            st.toast("✅ Datos de recuperación guardados automáticamente")
+            st.toast("✅ Datos de recuperación actualizados")
 
     if st.button("🚪 Cerrar Sesión", use_container_width=True):
-        # Guardado automático inmediato en la plataforma + registro en historial acumulado (Req 2)
         registrar_snapshot_cierre(datos, dolar_b, cotizaciones)
         st.session_state.confirmar_cierre = True
         st.rerun()
 
-# Cuadro interactivo al apretar Cerrar Sesión (Req 2)
+# Cuadro simplificado al apretar Cerrar Sesión (Req 4)
 if st.session_state.confirmar_cierre:
     st.markdown("""
     <div style="background: linear-gradient(145deg, #EAF6EE 0%, #F3E8FF 100%);
-                border: 2px solid #7E22CE; border-radius: 18px; padding: 20px; margin-bottom: 20px;
+                border: 2px solid #7E22CE; border-radius: 18px; padding: 20px; margin-bottom: 16px;
                 box-shadow: 0 8px 24px rgba(126, 34, 206, 0.14);">
-        <h3 style="color: #1B4332; margin-top: 0;">✅ ¡Tus cambios ya se guardaron automáticamente en la plataforma!</h3>
-        <p style="font-size: 1.08rem; color: #374151; margin-bottom: 8px;">
-            <b>¿Deseás descargar una planilla con tus cambios acumulados antes de salir?</b><br>
-            Podés guardarla en tu celular o computadora en formato <b>Excel (.xlsx)</b>, <b>CSV (.csv)</b> o <b>PDF (.pdf)</b> para ir acumulando tus cierres.
+        <h3 style="color: #1B4332; margin-top: 0; margin-bottom: 8px;">✅ ¡Tus cambios ya se guardaron automáticamente en la plataforma!</h3>
+        <p style="font-size: 1.15rem; color: #374151; font-weight: 700; margin-bottom: 0;">
+            ¿Deseás descargar una planilla con tus cambios antes de salir?
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    col_dl1, col_dl2, col_dl3, col_dl4, col_dl5 = st.columns([1.2, 1.2, 1.2, 1.3, 1.1])
+    col_dl1, col_dl2 = st.columns(2, gap="medium")
     with col_dl1:
         st.download_button(
-            label="📥 SÍ, bajar Excel (.xlsx)",
+            label="📥 SÍ, DESCARGAR Y CERRAR",
             data=generar_excel_bytes(datos, dolar_b, cotizaciones),
             file_name=f"Finanzas_Mama_{stamp_archivo}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1507,34 +1692,12 @@ if st.session_state.confirmar_cierre:
             on_click=finalizar_sesion
         )
     with col_dl2:
-        st.download_button(
-            label="📥 SÍ, bajar CSV (.csv)",
-            data=generar_csv_bytes(datos, dolar_b, cotizaciones),
-            file_name=f"Finanzas_Mama_{stamp_archivo}.csv",
-            mime="text/csv",
-            use_container_width=True,
-            on_click=finalizar_sesion
-        )
-    with col_dl3:
-        st.download_button(
-            label="📥 SÍ, bajar PDF (.pdf)",
-            data=generar_pdf_bytes(datos, dolar_b, cotizaciones),
-            file_name=f"Finanzas_Mama_{stamp_archivo}.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-            on_click=finalizar_sesion
-        )
-    with col_dl4:
-        if st.button("🚪 NO descargar, solo Salir", use_container_width=True):
+        if st.button("🚪 NO, CERRAR", use_container_width=True):
             finalizar_sesion()
             st.rerun()
-    with col_dl5:
-        if st.button("↩️ Seguir en la App", use_container_width=True):
-            st.session_state.confirmar_cierre = False
-            st.rerun()
 
 
-# ----------------- CALLBACKS DE GUARDADO AUTOMÁTICO (REQ 3, 5, 6) -----------------
+# ----------------- CALLBACKS DE GUARDADO AUTOMÁTICO -----------------
 def sync_orden_costos_cb():
     raw = st.session_state.get("sync_orden_costos_input", "")
     if not raw:
@@ -1629,35 +1792,37 @@ def auto_editar_cat_ingreso(cat_idx_i, nombre_viejo_i):
         guardar_datos(datos)
 
 
-# Inputs puente invisibles para recibir el nuevo orden al arrastrar categorías
+# Inputs puente invisibles para sincronizar el orden al arrastrar categorías
 st.text_input(
-    "sync_costos",
+    "SYNC_ORDEN_COSTOS",
     key="sync_orden_costos_input",
     placeholder="SYNC_ORDEN_COSTOS",
     label_visibility="collapsed",
     on_change=sync_orden_costos_cb
 )
 st.text_input(
-    "sync_ingresos",
+    "SYNC_ORDEN_INGRESOS",
     key="sync_orden_ingresos_input",
     placeholder="SYNC_ORDEN_INGRESOS",
     label_visibility="collapsed",
     on_change=sync_orden_ingresos_cb
 )
 
-# ----------------- PESTAÑAS -----------------
+# ----------------- PESTAÑAS EN MAYÚSCULAS (REQ 5) -----------------
 pestana1, pestana2 = st.tabs([
-    "📊 Costos e Ingresos",
-    "💎 Cartera de Inversiones"
+    "📊 COSTOS E INGRESOS",
+    "💎 CARTERA DE INVERSIONES"
 ])
 
 # =========================================================================
 # =========================== PESTAÑA 1 ===================================
 # =========================================================================
 with pestana1:
+    total_items_costos = len(datos["costos"])
     costos_activos = [c for c in datos["costos"] if c.get("activo", True)]
     total_costos = sum(c["monto"] for c in costos_activos)
 
+    total_items_ingresos = len(datos["ingresos"])
     ingresos_activos = [i for i in datos["ingresos"] if i.get("activo", True)]
     total_ingresos = sum(i["monto"] for i in ingresos_activos)
 
@@ -1680,7 +1845,7 @@ with pestana1:
         carita = "😟"
         sub_saldo = "Resultado negativo (Pérdida del mes)"
 
-    # Tarjetas KPI
+    # Tarjetas KPI con formato "XX activos de YY" (Req 7)
     col_kpi1, col_kpi2, col_kpi3 = st.columns(3, gap="medium")
     with col_kpi1:
         st.markdown(f"""
@@ -1688,7 +1853,7 @@ with pestana1:
             <div class="kpi-title">Costo Mensual</div>
             <div class="kpi-value">{total_costos:,.0f} ARS</div>
             <div class="kpi-usd">≈ {costos_usd:,.2f} USD</div>
-            <div class="kpi-sub">{len(costos_activos)} ítems activos</div>
+            <div class="kpi-sub">{len(costos_activos)} activos de {total_items_costos}</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1698,7 +1863,7 @@ with pestana1:
             <div class="kpi-title">Ingreso Mensual</div>
             <div class="kpi-value">{total_ingresos:,.0f} ARS</div>
             <div class="kpi-usd">≈ {ingresos_usd:,.2f} USD</div>
-            <div class="kpi-sub">{len(ingresos_activos)} ítems activos</div>
+            <div class="kpi-sub">{len(ingresos_activos)} activos de {total_items_ingresos}</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1757,20 +1922,19 @@ with pestana1:
 
     st.markdown("---")
 
-    # Columnas más anchas aprovechando todo el ancho disponible (Req 4)
     col_izq, col_der = st.columns(2, gap="medium")
 
     # ---------------- COSTOS ----------------
     with col_izq:
         st.markdown("<h3 style='color: #A04000; margin-bottom: 6px;'>📉 Mis Costos Mensuales</h3>", unsafe_allow_html=True)
-        st.caption("💡 Podés arrastrar cualquier categoría hacia arriba o abajo para cambiar su orden.")
+        st.caption("💡 Mantené apretado el encabezado (⠿) de cualquier categoría y arrastrala hacia arriba o abajo para moverla.")
 
         with st.expander("➕ AGREGAR NUEVA CATEGORÍA DE COSTOS"):
             c_nc1, c_nc2 = st.columns([2.8, 1.2])
             with c_nc1:
                 st.text_input(
                     "Nombre de la Categoría (ej. IMPUESTOS, AUTO, SALUD)",
-                    placeholder="Escribí el nombre y apretá Enter (el ícono se asigna solo)...",
+                    placeholder="Escribí el nombre de la categoría...",
                     key="input_nueva_cat_costo",
                     on_change=crear_categoria_costo_auto
                 )
@@ -1790,9 +1954,9 @@ with pestana1:
             sub_usd = sub_ars / dolar_b if dolar_b > 0 else 0
             icono_cat = datos.get("iconos_costos", {}).get(cat_nombre, predecir_icono_categoria(cat_nombre, "costo"))
 
-            titulo_cat = f"⠿ {icono_cat} **{cat_nombre}** — Subtotal: **{sub_ars:,.0f} ARS** ({sub_usd:,.1f} USD)"
+            # \u200b identifica de manera unívoca a las categorías de Costos para el Drag & Drop
+            titulo_cat = f"⠿\u200b {icono_cat} **{cat_nombre}** — Subtotal: **{sub_ars:,.0f} ARS** ({sub_usd:,.1f} USD)"
             with st.expander(titulo_cat, expanded=False):
-                # Edición automática de nombre o ícono sin botón Guardar y sin flechas celestes (Req 3 y 5)
                 editar_cat = st.checkbox(
                     "✏️ Editar nombre o ícono de la categoría",
                     key=f"chk_edit_c_{cat_idx}"
@@ -1821,7 +1985,6 @@ with pestana1:
                         )
 
                 if items_cat:
-                    # Proporción optimizada para que ACT. quede en un solo renglón (Req 3 y 4)
                     h1, h2, h3, h4 = st.columns([0.58, 2.35, 1.45, 0.55])
                     h1.markdown("<div class='col-header'>ACT.</div>", unsafe_allow_html=True)
                     h2.markdown("<div class='col-header'>SUBCATEGORÍA</div>", unsafe_allow_html=True)
@@ -1917,14 +2080,14 @@ with pestana1:
     # ---------------- INGRESOS ----------------
     with col_der:
         st.markdown("<h3 style='color: #117864; margin-bottom: 6px;'>📈 Mis Ingresos Mensuales</h3>", unsafe_allow_html=True)
-        st.caption("💡 Podés arrastrar cualquier categoría hacia arriba o abajo para cambiar su orden.")
+        st.caption("💡 Mantené apretado el encabezado (⠿) de cualquier categoría y arrastrala hacia arriba o abajo para moverla.")
 
         with st.expander("➕ AGREGAR NUEVA CATEGORÍA DE INGRESOS"):
             c_ni1, c_ni2 = st.columns([2.8, 1.2])
             with c_ni1:
                 st.text_input(
                     "Nombre de la Categoría (ej. Trabajo, Consultorio, Otros)",
-                    placeholder="Escribí el nombre y apretá Enter (el ícono se asigna solo)...",
+                    placeholder="Escribí el nombre de la categoría...",
                     key="input_nueva_cat_ingreso",
                     on_change=crear_categoria_ingreso_auto
                 )
@@ -1944,7 +2107,8 @@ with pestana1:
             sub_usd_i = sub_ars_i / dolar_b if dolar_b > 0 else 0
             icono_cat_i = datos.get("iconos_ingresos", {}).get(cat_nombre_i, predecir_icono_categoria(cat_nombre_i, "ingreso"))
 
-            titulo_cat_i = f"⠿ {icono_cat_i} **{cat_nombre_i}** — Subtotal: **{sub_ars_i:,.0f} ARS** ({sub_usd_i:,.1f} USD)"
+            # \u200c identifica de manera unívoca a las categorías de Ingresos para el Drag & Drop
+            titulo_cat_i = f"⠿\u200c {icono_cat_i} **{cat_nombre_i}** — Subtotal: **{sub_ars_i:,.0f} ARS** ({sub_usd_i:,.1f} USD)"
             with st.expander(titulo_cat_i, expanded=False):
                 editar_cat_i = st.checkbox(
                     "✏️ Editar nombre o ícono de la categoría",
@@ -2068,7 +2232,6 @@ with pestana1:
 
     st.markdown("---")
 
-    # Gráficos de Torta y Barras Horizontales Limpias (Req 7 y 8)
     st.markdown(
         "<h3 style='color: #5B4B8A;'>📊 Gráficos y Subtotales</h3>",
         unsafe_allow_html=True
@@ -2202,13 +2365,12 @@ with pestana2:
     total_patrimonio_ars = df_inv_activos["Valor en ARS"].sum() if not df_inv_activos.empty else 0
     total_patrimonio_usd = df_inv_activos["Valor en USD"].sum() if not df_inv_activos.empty else 0
 
-    # Tarjeta de Patrimonio
     st.markdown(f"""
     <div class="metric-card metric-card-lila" style="text-align: center;">
         <div class="kpi-title" style="font-size: 1.25rem;">Patrimonio Total</div>
         <div class="kpi-value" style="font-size: 2.35rem;">{total_patrimonio_ars:,.0f} ARS</div>
         <div class="kpi-usd" style="font-size: 1.2rem;">{total_patrimonio_usd:,.2f} USD</div>
-        <div class="kpi-sub">Calculado automáticamente con cotizaciones en vivo</div>
+        <div class="kpi-sub">{len(df_inv_activos)} activos de {len(inversiones)} contemplados</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2254,7 +2416,7 @@ with pestana2:
 
             plat_act = st.text_input("2. Ubicación, ¿dónde está?")
             cant_texto = st.text_input(
-                "3. Cantidad que tenés (apretá Enter para guardar)",
+                "3. Cantidad que tenés",
                 placeholder="Ej: 40000 o 0.5"
             )
             btn_guardar_inv = st.form_submit_button(
@@ -2436,7 +2598,6 @@ with pestana2:
 
     st.markdown("---")
 
-    # Tabla discriminada con Cotizaciones en Vivo
     st.markdown(
         "<h3 style='color: #5B4B8A;'>📊 Distribución y Cotizaciones en Vivo</h3>",
         unsafe_allow_html=True
@@ -2490,3 +2651,5 @@ with pestana2:
             tabla_d["Valor en USD"] = tabla_d["Valor en USD"].apply(lambda x: f"{x:,.2f} USD")
             tabla_d["%"] = tabla_d["%"].apply(lambda x: f"{x:.1f}%")
             st.dataframe(tabla_d, use_container_width=True, hide_index=True)
+
+activar_interactividad_avanzada(datos.get('categorias_costos', []), datos.get('categorias_ingresos', []))
