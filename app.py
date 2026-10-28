@@ -76,18 +76,13 @@ def predecir_icono_categoria(nombre, tipo="costo"):
     return "💵" if tipo == "ingreso" else "📌"
 
 
-# ----------------- INTERACTIVIDAD: DRAG & DROP INFINITO, CONECTORES TORTA Y ANTI-POPUP -----------------
+# ----------------- INTERACTIVIDAD: ESTILOS DINÁMICOS, CONECTORES TORTA Y ANTI-POPUP -----------------
 def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
     js_code = r"""
     <script>
     (function() {
         const win = window.parent;
         const doc = win.document;
-
-        function closestEl(node, selector) {
-            let el = (node && node.nodeType === 1) ? node : (node ? node.parentElement : null);
-            return (el && el.closest) ? el.closest(selector) : null;
-        }
 
         // 1. Envolver el emoji 🍀 de las solapas principales para darle 1.3em y opacidad 1 (activa) / 0.5 (inactiva)
         function estilizarTrebolesSolapas() {
@@ -169,8 +164,8 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
             extNodes.forEach(n => n.remove());
         }
 
-        // 3. Resaltar los desplegables "+ AGREGAR NUEVA CATEGORÍA DE COSTOS" y "DE INGRESOS" (Cambio 2)
-        function estilizarSolapasCategorias() {
+        // 3. Resaltar "+ AGREGAR NUEVA CATEGORÍA" y compactar botones apilados ▲ y ▼
+        function estilizarSolapasYBotonesOrden() {
             const todosDetails = Array.from(doc.querySelectorAll('details'));
             todosDetails.forEach(det => {
                 const sum = det.querySelector('summary');
@@ -211,6 +206,33 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                         el.style.setProperty('fill', '#0E6251', 'important');
                         el.style.setProperty('font-weight', '800', 'important');
                     });
+                }
+            });
+
+            // Ajustar botones ▲ y ▼ apilados para que la suma de ambos (21px + 2px + 21px = 44px) no supere el alto de la categoría
+            const botones = Array.from(doc.querySelectorAll('button'));
+            botones.forEach(btn => {
+                const t = (btn.innerText || btn.textContent || '').trim();
+                if (t === '▲' || t === '▼') {
+                    btn.style.setProperty('height', '21px', 'important');
+                    btn.style.setProperty('min-height', '21px', 'important');
+                    btn.style.setProperty('max-height', '21px', 'important');
+                    btn.style.setProperty('width', '28px', 'important');
+                    btn.style.setProperty('min-width', '28px', 'important');
+                    btn.style.setProperty('padding', '0px', 'important');
+                    btn.style.setProperty('margin', '0px', 'important');
+                    btn.style.setProperty('border-radius', '6px', 'important');
+                    btn.style.setProperty('line-height', '1', 'important');
+                    btn.querySelectorAll('p, span, div').forEach(ch => {
+                        ch.style.setProperty('font-size', '0.68rem', 'important');
+                        ch.style.setProperty('line-height', '1', 'important');
+                        ch.style.setProperty('margin', '0px', 'important');
+                        ch.style.setProperty('padding', '0px', 'important');
+                    });
+                    const vBlock = btn.closest('[data-testid="stVerticalBlock"]');
+                    if (vBlock) {
+                        vBlock.style.setProperty('gap', '2px', 'important');
+                    }
                 }
             });
         }
@@ -300,127 +322,13 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
             });
         }
 
-        // 5. Etiquetar todos los bloques de categorías (tanto para Costos como para Ingresos)
-        function obtenerBloqueMovible(det, refDet) {
-            let curr = det;
-            while (curr && curr.parentElement && !curr.parentElement.contains(refDet)) {
-                curr = curr.parentElement;
-            }
-            return curr;
-        }
-
-        function etiquetarCategorias() {
+        function actualizarInterfaz() {
             estilizarTrebolesSolapas();
             limpiarInputsYPopups();
-            estilizarSolapasCategorias();
+            estilizarSolapasYBotonesOrden();
             asegurarLineasConectorasTortas();
-
-            const expanders = Array.from(doc.querySelectorAll('details'));
-            const detsPorTipo = { costo: [], ingreso: [] };
-
-            const h3s = Array.from(doc.querySelectorAll('h3'));
-            const h3Ingresos = h3s.find(el => (el.innerText || '').includes('Mis Ingresos Mensuales'));
-
-            expanders.forEach(det => {
-                const summary = det.querySelector('summary');
-                if (!summary) return;
-                const texto = summary.innerText || summary.textContent || '';
-                if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
-
-                const rawTc = summary.textContent || '';
-                let tipo = 'costo';
-                if (rawTc.includes('‌')) {
-                    tipo = 'ingreso';
-                } else if (rawTc.includes('​')) {
-                    tipo = 'costo';
-                } else if (h3Ingresos) {
-                    const pos = h3Ingresos.compareDocumentPosition(det);
-                    tipo = (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? 'ingreso' : 'costo';
-                }
-
-                let catNombre = '';
-                const strongEl = summary.querySelector('strong');
-                if (strongEl && strongEl.innerText) {
-                    catNombre = strongEl.innerText.replace(/[​‌]/g, '').trim();
-                } else {
-                    const parte = texto.split('— Subtotal:')[0].replace('⠿', '').replace(/[​‌]/g, '').trim();
-                    const tokens = parte.split(' ');
-                    if (tokens.length > 1) tokens.shift();
-                    catNombre = tokens.join(' ').trim();
-                }
-
-                det.setAttribute('data-cat-nombre', catNombre);
-                det.setAttribute('data-cat-tipo', tipo);
-                det.setAttribute('draggable', 'false');
-
-                summary.style.cursor = 'grab';
-                summary.style.userSelect = 'none';
-                summary.style.webkitUserSelect = 'none';
-                summary.style.touchAction = 'none';
-                summary.setAttribute('draggable', 'false');
-
-                detsPorTipo[tipo].push(det);
-            });
-
-            ['costo', 'ingreso'].forEach(tipo => {
-                const listaDets = detsPorTipo[tipo];
-                if (listaDets.length < 2) return;
-                listaDets.forEach((d, i) => {
-                    const otro = listaDets[i === 0 ? 1 : 0];
-                    const b = obtenerBloqueMovible(d, otro);
-                    if (b) {
-                        b.setAttribute('data-cat-block-tipo', tipo);
-                        b.setAttribute('data-cat-block-nombre', d.getAttribute('data-cat-nombre'));
-                    }
-                });
-            });
         }
 
-        function enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrdenArray) {
-            const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
-            const targetInput = inputs.find(
-                el => el.placeholder === placeholderKey || el.getAttribute('aria-label') === placeholderKey
-            );
-            if (!targetInput) return;
-
-            const valorJson = JSON.stringify({ orden: nuevoOrdenArray, ts: Date.now() });
-
-            targetInput.readOnly = false;
-            targetInput.focus({ preventScroll: true });
-
-            const nativeSetter = Object.getOwnPropertyDescriptor(
-                win.HTMLInputElement.prototype,
-                'value'
-            ).set;
-            nativeSetter.call(targetInput, valorJson);
-
-            if (targetInput._valueTracker) {
-                targetInput._valueTracker.setValue('');
-            }
-
-            targetInput.dispatchEvent(new win.Event('input', { bubbles: true, composed: true }));
-            targetInput.dispatchEvent(new win.Event('change', { bubbles: true, composed: true }));
-
-            setTimeout(() => {
-                targetInput.focus({ preventScroll: true });
-                const enterOpts = {
-                    key: 'Enter',
-                    code: 'Enter',
-                    keyCode: 13,
-                    which: 13,
-                    charCode: 13,
-                    bubbles: true,
-                    cancelable: true,
-                    composed: true
-                };
-                targetInput.dispatchEvent(new win.KeyboardEvent('keydown', enterOpts));
-                targetInput.dispatchEvent(new win.KeyboardEvent('keypress', enterOpts));
-                targetInput.dispatchEvent(new win.KeyboardEvent('keyup', enterOpts));
-                targetInput.blur();
-            }, 45);
-        }
-
-        // Limpiar listeners previos en window.parent (si hubiera de un iframe anterior) y registrar nuevos activos
         if (win.__jardinCleanupListeners) {
             try { win.__jardinCleanupListeners(); } catch (e) {}
         }
@@ -428,7 +336,7 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
         const abortCtrl = new AbortController();
         const sig = abortCtrl.signal;
 
-        // Navegación con flechas Arriba/Abajo entre inputs
+        // Navegación con flechas Arriba/Abajo del teclado entre celdas de texto
         doc.addEventListener('keydown', function(e) {
             const active = doc.activeElement;
             if (!active || active.tagName !== 'INPUT') return;
@@ -438,9 +346,7 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                     doc.querySelectorAll(
                         'input:not([disabled]):not([type="hidden"]):not([type="checkbox"])'
                     )
-                ).filter(el => el.offsetParent !== null &&
-                               el.placeholder !== 'SYNC_ORDEN_COSTOS' &&
-                               el.placeholder !== 'SYNC_ORDEN_INGRESOS');
+                ).filter(el => el.offsetParent !== null);
 
                 const idx = inputs.indexOf(active);
                 if (idx !== -1) {
@@ -457,174 +363,14 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
             }
         }, { capture: true, signal: sig });
 
-        // Drag & Drop con mouse y touchpad + sincronización inmediata
-        let dragState = null;
-        let suppressNextSummaryClick = false;
-
-        doc.addEventListener('dragstart', function(e) {
-            const sum = closestEl(e.target, 'summary');
-            if (sum && (sum.innerText || '').includes('⠿')) {
-                e.preventDefault();
-            }
-        }, { capture: true, signal: sig });
-
-        doc.addEventListener('pointerdown', function(e) {
-            if (e.button !== undefined && e.button !== 0) return;
-            const tgtEl = (e.target && e.target.nodeType === 1) ? e.target : (e.target ? e.target.parentElement : null);
-            if (!tgtEl) return;
-            if (['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA'].includes(tgtEl.tagName) || closestEl(tgtEl, 'button')) return;
-
-            const summary = closestEl(tgtEl, 'summary');
-            if (!summary) return;
-            const texto = summary.innerText || summary.textContent || '';
-            if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
-
-            etiquetarCategorias();
-
-            const det = closestEl(summary, 'details');
-            if (!det) return;
-            const tipo = det.getAttribute('data-cat-tipo');
-            const block = closestEl(det, '[data-cat-block-tipo="' + tipo + '"]');
-            if (!block || !block.parentElement) return;
-
-            const sharedParent = block.parentElement;
-            const bloquesIniciales = Array.from(
-                sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
-            );
-            if (bloquesIniciales.length < 2) return;
-
-            dragState = {
-                summary: summary,
-                det: det,
-                block: block,
-                tipo: tipo,
-                sharedParent: sharedParent,
-                startIdx: bloquesIniciales.indexOf(block),
-                ordenNombresInicial: bloquesIniciales.map(b => b.getAttribute('data-cat-block-nombre')),
-                startY: e.clientY,
-                pointerId: e.pointerId,
-                isDragging: false
-            };
-        }, { capture: true, signal: sig });
-
-        doc.addEventListener('pointermove', function(e) {
-            if (!dragState) return;
-            const dy = e.clientY - dragState.startY;
-
-            if (!dragState.isDragging && Math.abs(dy) > 4) {
-                dragState.isDragging = true;
-                try {
-                    if (dragState.pointerId !== null && dragState.summary.setPointerCapture) {
-                        dragState.summary.setPointerCapture(dragState.pointerId);
-                    }
-                } catch (err) {}
-                dragState.summary.style.cursor = 'grabbing';
-                dragState.block.style.opacity = '0.86';
-                dragState.block.style.transform = 'scale(1.01)';
-                dragState.block.style.boxShadow = '0 10px 24px rgba(45, 106, 79, 0.22)';
-                dragState.block.style.zIndex = '999';
-                dragState.block.style.position = 'relative';
-            }
-
-            if (dragState.isDragging) {
-                if (e.cancelable) e.preventDefault();
-                const { sharedParent, tipo, block } = dragState;
-                const otros = Array.from(
-                    sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
-                ).filter(h => h !== block);
-
-                if (otros.length > 0) {
-                    let siguiente = null;
-                    for (const herm of otros) {
-                        const rect = herm.getBoundingClientRect();
-                        const centro = rect.top + rect.height / 2;
-                        if (e.clientY < centro) {
-                            siguiente = herm;
-                            break;
-                        }
-                    }
-                    if (siguiente) {
-                        if (block.nextElementSibling !== siguiente) {
-                            sharedParent.insertBefore(block, siguiente);
-                        }
-                    } else {
-                        const ultimo = otros[otros.length - 1];
-                        if (ultimo.nextElementSibling !== block) {
-                            sharedParent.insertBefore(block, ultimo.nextSibling);
-                        }
-                    }
-                }
-            }
-        }, { passive: false, capture: true, signal: sig });
-
-        function finalizarDragGlobal(e) {
-            if (!dragState) return;
-            const st = dragState;
-            dragState = null;
-
-            if (st.isDragging) {
-                try {
-                    if (st.pointerId !== null && st.summary.releasePointerCapture) {
-                        st.summary.releasePointerCapture(st.pointerId);
-                    }
-                } catch (err) {}
-
-                st.summary.style.cursor = 'grab';
-                st.block.style.opacity = '1';
-                st.block.style.transform = 'none';
-                st.block.style.boxShadow = 'none';
-                st.block.style.zIndex = '';
-
-                suppressNextSummaryClick = true;
-                setTimeout(() => { suppressNextSummaryClick = false; }, 300);
-
-                const bloquesFinales = Array.from(
-                    st.sharedParent.querySelectorAll('[data-cat-block-tipo="' + st.tipo + '"]')
-                );
-                const endIdx = bloquesFinales.indexOf(st.block);
-                const nuevoOrden = bloquesFinales.map(el => el.getAttribute('data-cat-block-nombre')).filter(Boolean);
-
-                if (JSON.stringify(nuevoOrden) !== JSON.stringify(st.ordenNombresInicial)) {
-                    // Si se movió 1 posición, accionar directamente el botón nativo ▲ o ▼ para guardado instantáneo
-                    const btns = Array.from(st.block.querySelectorAll('button'));
-                    const btnSubir = btns.find(b => (b.innerText || '').includes('▲'));
-                    const btnBajar = btns.find(b => (b.innerText || '').includes('▼'));
-
-                    if (endIdx === st.startIdx - 1 && btnSubir && !btnSubir.disabled) {
-                        btnSubir.click();
-                    } else if (endIdx === st.startIdx + 1 && btnBajar && !btnBajar.disabled) {
-                        btnBajar.click();
-                    } else {
-                        const placeholderKey = st.tipo === 'costo' ? 'SYNC_ORDEN_COSTOS' : 'SYNC_ORDEN_INGRESOS';
-                        enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrden);
-                    }
-                }
-            }
-        }
-
-        doc.addEventListener('pointerup', finalizarDragGlobal, { capture: true, signal: sig });
-        doc.addEventListener('pointercancel', finalizarDragGlobal, { capture: true, signal: sig });
-
-        doc.addEventListener('click', function(e) {
-            if (suppressNextSummaryClick) {
-                const sum = closestEl(e.target, 'summary');
-                if (sum) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    suppressNextSummaryClick = false;
-                }
-            }
+        doc.addEventListener('click', function() {
             setTimeout(estilizarTrebolesSolapas, 30);
         }, { capture: true, signal: sig });
 
         let timerObs = null;
         const obs = new MutationObserver(() => {
             clearTimeout(timerObs);
-            timerObs = setTimeout(() => {
-                if (!dragState) {
-                    etiquetarCategorias();
-                }
-            }, 100);
+            timerObs = setTimeout(actualizarInterfaz, 90);
         });
         obs.observe(doc.body, { childList: true, subtree: true });
 
@@ -633,9 +379,9 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
             obs.disconnect();
         };
 
-        etiquetarCategorias();
-        setTimeout(etiquetarCategorias, 150);
-        setTimeout(etiquetarCategorias, 450);
+        actualizarInterfaz();
+        setTimeout(actualizarInterfaz, 150);
+        setTimeout(actualizarInterfaz, 450);
     })();
     </script>
     """
@@ -1770,16 +1516,37 @@ st.markdown("""
         box-shadow: 0 6px 16px rgba(124, 58, 237, 0.08) !important;
     }
 
-    /* Ocultar los inputs puente usados para sincronizar el Drag & Drop */
-    div[data-testid="stTextInput"]:has(input[placeholder="SYNC_ORDEN_COSTOS"]),
-    div[data-testid="stTextInput"]:has(input[placeholder="SYNC_ORDEN_INGRESOS"]) {
-        position: fixed !important;
-        left: -9999px !important;
-        top: -9999px !important;
-        width: 1px !important;
-        height: 1px !important;
-        overflow: hidden !important;
-        opacity: 0 !important;
+    /* Botones compactos apilados ▲ y ▼ (uno arriba del otro, altura total 44px igual al alto de la categoría) */
+    div[data-testid="stElementContainer"]:has(.flechas-cat-stack),
+    .element-container:has(.flechas-cat-stack) {
+        display: none !important;
+        height: 0px !important;
+        margin: 0px !important;
+        padding: 0px !important;
+    }
+    div[data-testid="stVerticalBlock"]:has(.flechas-cat-stack) {
+        gap: 2px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        align-items: center !important;
+    }
+    div[data-testid="stVerticalBlock"]:has(.flechas-cat-stack) div[data-testid="stButton"] button {
+        height: 21px !important;
+        min-height: 21px !important;
+        max-height: 21px !important;
+        width: 28px !important;
+        min-width: 28px !important;
+        padding: 0px !important;
+        margin: 0px !important;
+        border-radius: 6px !important;
+        line-height: 1 !important;
+    }
+    div[data-testid="stVerticalBlock"]:has(.flechas-cat-stack) div[data-testid="stButton"] button p {
+        font-size: 0.68rem !important;
+        line-height: 1 !important;
+        margin: 0px !important;
+        padding: 0px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -2194,22 +1961,6 @@ def auto_editar_cat_ingreso(cat_idx_i, nombre_viejo_i):
         guardar_datos(datos)
 
 
-# Inputs puente invisibles para sincronizar el orden al arrastrar categorías
-st.text_input(
-    "SYNC_ORDEN_COSTOS",
-    key="sync_orden_costos_input",
-    placeholder="SYNC_ORDEN_COSTOS",
-    label_visibility="collapsed",
-    on_change=sync_orden_costos_cb
-)
-st.text_input(
-    "SYNC_ORDEN_INGRESOS",
-    key="sync_orden_ingresos_input",
-    placeholder="SYNC_ORDEN_INGRESOS",
-    label_visibility="collapsed",
-    on_change=sync_orden_ingresos_cb
-)
-
 def mover_categoria_costo(idx_actual, direccion):
     cats = datos.get("categorias_costos", [])
     nuevo_idx = idx_actual + direccion
@@ -2374,28 +2125,25 @@ with pestana1:
             sub_usd = sub_ars / dolar_b if dolar_b > 0 else 0
             icono_cat = datos.get("iconos_costos", {}).get(cat_nombre, predecir_icono_categoria(cat_nombre, "costo"))
 
-            # \u200b identifica de manera unívoca a las categorías de Costos para el Drag & Drop
-            titulo_cat = f"⠿\u200b {icono_cat} **{cat_nombre}** — Subtotal: **{sub_ars:,.0f} ARS** ({sub_usd:,.1f} USD)"
-            col_exp_c, col_up_c, col_down_c = st.columns([0.84, 0.08, 0.08], gap="small")
-            with col_up_c:
+            titulo_cat = f"{icono_cat} **{cat_nombre}** — subt= **{sub_ars:,.0f} ARS** ({sub_usd:,.1f} USD)"
+            col_exp_c, col_arrows_c = st.columns([0.94, 0.06], gap="small")
+            with col_arrows_c:
+                st.markdown("<div class='flechas-cat-stack'></div>", unsafe_allow_html=True)
                 st.button(
                     "▲",
                     key=f"btn_up_c_{cat_nombre}",
                     disabled=(cat_idx == 0),
                     help=f"Subir {cat_nombre}",
                     on_click=mover_categoria_costo,
-                    args=(cat_idx, -1),
-                    use_container_width=True
+                    args=(cat_idx, -1)
                 )
-            with col_down_c:
                 st.button(
                     "▼",
                     key=f"btn_down_c_{cat_nombre}",
                     disabled=(cat_idx == len(datos["categorias_costos"]) - 1),
                     help=f"Bajar {cat_nombre}",
                     on_click=mover_categoria_costo,
-                    args=(cat_idx, 1),
-                    use_container_width=True
+                    args=(cat_idx, 1)
                 )
             with col_exp_c.expander(titulo_cat, expanded=False):
                 editar_cat = st.checkbox(
@@ -2548,28 +2296,25 @@ with pestana1:
             sub_usd_i = sub_ars_i / dolar_b if dolar_b > 0 else 0
             icono_cat_i = datos.get("iconos_ingresos", {}).get(cat_nombre_i, predecir_icono_categoria(cat_nombre_i, "ingreso"))
 
-            # \u200c identifica de manera unívoca a las categorías de Ingresos para el Drag & Drop
-            titulo_cat_i = f"⠿\u200c {icono_cat_i} **{cat_nombre_i}** — Subtotal: **{sub_ars_i:,.0f} ARS** ({sub_usd_i:,.1f} USD)"
-            col_exp_i, col_up_i, col_down_i = st.columns([0.84, 0.08, 0.08], gap="small")
-            with col_up_i:
+            titulo_cat_i = f"{icono_cat_i} **{cat_nombre_i}** — subt= **{sub_ars_i:,.0f} ARS** ({sub_usd_i:,.1f} USD)"
+            col_exp_i, col_arrows_i = st.columns([0.94, 0.06], gap="small")
+            with col_arrows_i:
+                st.markdown("<div class='flechas-cat-stack'></div>", unsafe_allow_html=True)
                 st.button(
                     "▲",
                     key=f"btn_up_i_{cat_nombre_i}",
                     disabled=(cat_idx_i == 0),
                     help=f"Subir {cat_nombre_i}",
                     on_click=mover_categoria_ingreso,
-                    args=(cat_idx_i, -1),
-                    use_container_width=True
+                    args=(cat_idx_i, -1)
                 )
-            with col_down_i:
                 st.button(
                     "▼",
                     key=f"btn_down_i_{cat_nombre_i}",
                     disabled=(cat_idx_i == len(datos["categorias_ingresos"]) - 1),
                     help=f"Bajar {cat_nombre_i}",
                     on_click=mover_categoria_ingreso,
-                    args=(cat_idx_i, 1),
-                    use_container_width=True
+                    args=(cat_idx_i, 1)
                 )
             with col_exp_i.expander(titulo_cat_i, expanded=False):
                 editar_cat_i = st.checkbox(
@@ -2981,7 +2726,7 @@ with pestana2:
                 )
 
                 titulo_exp_inv = (
-                    f"📂 **{cat_inv}** — Subtotal: "
+                    f"📂 **{cat_inv}** — subt= "
                     f"**{sub_inv_ars:,.0f} ARS** ({sub_inv_usd:,.2f} USD)"
                 )
                 with st.expander(titulo_exp_inv, expanded=True):
