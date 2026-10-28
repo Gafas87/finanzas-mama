@@ -76,7 +76,7 @@ def predecir_icono_categoria(nombre, tipo="costo"):
     return "💵" if tipo == "ingreso" else "📌"
 
 
-# ----------------- INTERACTIVIDAD: FLECHAS, COLORES Y DRAG & DROP INFINITO (REQ 1 y 2) -----------------
+# ----------------- INTERACTIVIDAD: DRAG & DROP INFINITO, CONECTORES TORTA Y ANTI-POPUP -----------------
 def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
     js_code = """
     <script>
@@ -84,155 +84,298 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
         const win = window.parent;
         const doc = win.document;
 
-        // 1. Ocultar carteles "Press Enter to apply" y desactivar popups como "New Email Alias" (Req 2)
-        function limpiarInputsYPopups() {
-            const instrucciones = doc.querySelectorAll('[data-testid="InputInstructions"]');
-            instrucciones.forEach(el => {
-                el.style.display = 'none';
-                el.style.visibility = 'hidden';
-            });
+        // Inyectamos el motor directamente en window.parent.document.head
+        // para que viva en la ventana principal y NUNCA muera al cambiar de pantalla o re-renderizar iframes.
+        const engineCode = `
+        (function() {
+            const win = window;
+            const doc = document;
 
-            const inputs = doc.querySelectorAll('input');
-            inputs.forEach(inp => {
-                if (inp.getAttribute('data-clean-autofill') !== 'true') {
-                    inp.setAttribute('data-clean-autofill', 'true');
-                    inp.setAttribute('autocomplete', 'off');
-                    inp.setAttribute('autocorrect', 'off');
-                    inp.setAttribute('autocapitalize', 'off');
-                    inp.setAttribute('spellcheck', 'false');
-                    inp.setAttribute('data-ddg-inputtype', 'unknown');
-                    inp.setAttribute('data-1p-ignore', 'true');
-                    inp.setAttribute('data-lpignore', 'true');
-                    inp.setAttribute('data-bwignore', 'true');
-                    inp.setAttribute('data-form-type', 'other');
-                }
-            });
-
-            // Eliminar cualquier botón/popup inyectado por extensiones (ej. DuckDuckGo / Firefox Relay "New Email Alias")
-            const extNodes = doc.querySelectorAll('ddg-autofill, [data-ddg-autofill], .fx-relay-icon, firefox-private-relay-addon-data');
-            extNodes.forEach(n => n.remove());
-        }
-
-        // 2. Colorear en Rojo Pastel y Verde Pastel las solapas de AGREGAR NUEVA CATEGORÍA
-        function colorearSolapasAgregarCategoria() {
-            const todosDetails = Array.from(doc.querySelectorAll('details'));
-            todosDetails.forEach(det => {
-                const sum = det.querySelector('summary');
-                if (!sum) return;
-                const txt = (sum.innerText || '').toUpperCase();
-
-                if (txt.includes('AGREGAR NUEVA CATEGORÍA DE COSTOS')) {
-                    det.style.backgroundColor = '#FDEDEC';
-                    det.style.border = '2px solid #E57373';
-                    det.style.borderRadius = '14px';
-                    det.style.marginBottom = '10px';
-                    sum.style.backgroundColor = '#FADBD8';
-                    sum.style.color = '#78281F';
-                    sum.style.fontWeight = '800';
-                    sum.style.borderRadius = '12px';
-                    sum.style.padding = '10px 14px';
-                    sum.querySelectorAll('p, span').forEach(el => {
-                        el.style.color = '#78281F';
-                        el.style.fontWeight = '800';
-                    });
-                } else if (txt.includes('AGREGAR NUEVA CATEGORÍA DE INGRESOS')) {
-                    det.style.backgroundColor = '#E8F8F5';
-                    det.style.border = '2px solid #52BE80';
-                    det.style.borderRadius = '14px';
-                    det.style.marginBottom = '10px';
-                    sum.style.backgroundColor = '#D4EFDF';
-                    sum.style.color = '#145A32';
-                    sum.style.fontWeight = '800';
-                    sum.style.borderRadius = '12px';
-                    sum.style.padding = '10px 14px';
-                    sum.querySelectorAll('p, span').forEach(el => {
-                        el.style.color = '#145A32';
-                        el.style.fontWeight = '800';
-                    });
-                }
-            });
-        }
-
-        // 3. Etiquetar todos los bloques de categorías cada vez que Streamlit actualiza el DOM
-        function obtenerBloqueMovible(det, refDet) {
-            let curr = det;
-            while (curr && curr.parentElement && !curr.parentElement.contains(refDet)) {
-                curr = curr.parentElement;
+            if (win.__jardinCleanup) {
+                try { win.__jardinCleanup(); } catch (e) {}
             }
-            return curr;
-        }
 
-        function etiquetarCategorias() {
-            limpiarInputsYPopups();
-            colorearSolapasAgregarCategoria();
+            const abortCtrl = new AbortController();
+            const sig = abortCtrl.signal;
 
-            const expanders = Array.from(doc.querySelectorAll('details'));
-            const detsPorTipo = { costo: [], ingreso: [] };
+            function closestEl(node, selector) {
+                let el = (node && node.nodeType === 1) ? node : (node ? node.parentElement : null);
+                return (el && el.closest) ? el.closest(selector) : null;
+            }
 
-            const h3s = Array.from(doc.querySelectorAll('h3'));
-            const h3Ingresos = h3s.find(el => (el.innerText || '').includes('Mis Ingresos Mensuales'));
+            // 1. Ocultar "Press Enter to apply" y blindar inputs contra el popup de contraseñas guardadas (Req 5)
+            function limpiarInputsYPopups() {
+                const instrucciones = doc.querySelectorAll('[data-testid="InputInstructions"]');
+                instrucciones.forEach(el => {
+                    el.style.display = 'none';
+                    el.style.visibility = 'hidden';
+                });
 
-            expanders.forEach(det => {
-                const summary = det.querySelector('summary');
-                if (!summary) return;
-                const texto = summary.innerText || summary.textContent || '';
-                if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
+                const sidebar = doc.querySelector('[data-testid="stSidebar"]');
+                const inputs = doc.querySelectorAll('input');
+                inputs.forEach((inp, idx) => {
+                    const enSidebar = sidebar && sidebar.contains(inp);
+                    if (inp.getAttribute('data-clean-autofill') !== 'true') {
+                        inp.setAttribute('data-clean-autofill', 'true');
+                        inp.setAttribute('autocomplete', enSidebar ? 'one-time-code' : 'off');
+                        inp.setAttribute('autocorrect', 'off');
+                        inp.setAttribute('autocapitalize', 'off');
+                        inp.setAttribute('spellcheck', 'false');
+                        inp.setAttribute('data-ddg-inputtype', 'unknown');
+                        inp.setAttribute('data-1p-ignore', 'true');
+                        inp.setAttribute('data-lpignore', 'true');
+                        inp.setAttribute('data-bwignore', 'true');
+                        inp.setAttribute('data-form-type', 'other');
+                    }
 
-                const rawTc = summary.textContent || '';
-                let tipo = 'costo';
-                if (rawTc.includes('\u200c')) {
-                    tipo = 'ingreso';
-                } else if (rawTc.includes('\u200b')) {
-                    tipo = 'costo';
-                } else if (h3Ingresos) {
-                    const pos = h3Ingresos.compareDocumentPosition(det);
-                    tipo = (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? 'ingreso' : 'costo';
-                }
-
-                // Extraer el nombre exacto desde el primer <strong> dentro de <summary>
-                let catNombre = '';
-                const strongEl = summary.querySelector('strong');
-                if (strongEl && strongEl.innerText) {
-                    catNombre = strongEl.innerText.replace(/[\u200b\u200c]/g, '').trim();
-                } else {
-                    const parte = texto.split('— Subtotal:')[0].replace('⠿', '').replace(/[​‌]/g, '').trim();
-                    const tokens = parte.split(' ');
-                    if (tokens.length > 1) tokens.shift();
-                    catNombre = tokens.join(' ').trim();
-                }
-
-                det.setAttribute('data-cat-nombre', catNombre);
-                det.setAttribute('data-cat-tipo', tipo);
-                summary.style.cursor = 'grab';
-                summary.style.userSelect = 'none';
-                summary.style.webkitUserSelect = 'none';
-                detsPorTipo[tipo].push(det);
-            });
-
-            ['costo', 'ingreso'].forEach(tipo => {
-                const listaDets = detsPorTipo[tipo];
-                if (listaDets.length < 2) return;
-                listaDets.forEach((d, i) => {
-                    const otro = listaDets[i === 0 ? 1 : 0];
-                    const b = obtenerBloqueMovible(d, otro);
-                    if (b) {
-                        b.setAttribute('data-cat-block-tipo', tipo);
-                        b.setAttribute('data-cat-block-nombre', d.getAttribute('data-cat-nombre'));
+                    // En el panel lateral ("Mis Datos de Recuperación"), evitar que Chrome/Brave abra el gestor de contraseñas
+                    if (enSidebar && inp.type !== 'checkbox') {
+                        inp.setAttribute('autocomplete', 'one-time-code');
+                        inp.setAttribute('name', 'jardin_cfg_field_' + idx);
+                        const ariaLbl = (inp.getAttribute('aria-label') || '');
+                        if (ariaLbl.includes('Clave App') || ariaLbl.includes('API Key')) {
+                            inp.style.webkitTextSecurity = 'disc';
+                        }
+                        if (inp.getAttribute('data-readonly-shield') !== 'true') {
+                            inp.setAttribute('data-readonly-shield', 'true');
+                            if (doc.activeElement !== inp) {
+                                inp.readOnly = true;
+                            }
+                            inp.addEventListener('pointerdown', function() {
+                                inp.readOnly = false;
+                            });
+                            inp.addEventListener('focus', function() {
+                                setTimeout(() => { inp.readOnly = false; }, 15);
+                            });
+                            inp.addEventListener('blur', function() {
+                                inp.readOnly = true;
+                            });
+                        }
                     }
                 });
-            });
-        }
 
-        win.__jardinEtiquetar = etiquetarCategorias;
-        etiquetarCategorias();
-        setTimeout(etiquetarCategorias, 180);
-        setTimeout(etiquetarCategorias, 600);
+                const extNodes = doc.querySelectorAll('ddg-autofill, [data-ddg-autofill], .fx-relay-icon, firefox-private-relay-addon-data');
+                extNodes.forEach(n => n.remove());
+            }
 
-        // 4. Instalar controladores globales en window.parent (una sola vez, viven para siempre y permiten arrastrar infinitas veces)
-        if (!win.__jardinDndInstalado) {
-            win.__jardinDndInstalado = true;
+            // 2. Diseño moderno tipo cápsula tecnológica para las solapas de AGREGAR NUEVA CATEGORÍA
+            function estilizarSolapasCategorias() {
+                const todosDetails = Array.from(doc.querySelectorAll('details'));
+                todosDetails.forEach(det => {
+                    const sum = det.querySelector('summary');
+                    if (!sum) return;
+                    const txt = (sum.innerText || '').toUpperCase();
 
-            // Navegación con flechas Arriba/Abajo entre inputs
+                    if (txt.includes('AGREGAR NUEVA CATEGORÍA DE COSTOS')) {
+                        det.style.background = 'linear-gradient(135deg, #FFF5F5 0%, #FFE3E3 100%)';
+                        det.style.border = '1.5px solid #FDA4AF';
+                        det.style.borderRadius = det.open ? '22px' : '999px';
+                        det.style.marginBottom = '12px';
+                        det.style.boxShadow = '0 6px 18px rgba(244, 63, 94, 0.12)';
+                        det.style.transition = 'all 0.25s ease';
+                        sum.style.background = 'linear-gradient(135deg, #FFE4E6 0%, #FECDD3 100%)';
+                        sum.style.color = '#881337';
+                        sum.style.fontWeight = '800';
+                        sum.style.borderRadius = det.open ? '20px 20px 12px 12px' : '999px';
+                        sum.style.padding = '11px 18px';
+                        sum.querySelectorAll('p, span').forEach(el => {
+                            el.style.color = '#881337';
+                            el.style.fontWeight = '800';
+                        });
+                    } else if (txt.includes('AGREGAR NUEVA CATEGORÍA DE INGRESOS')) {
+                        det.style.background = 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)';
+                        det.style.border = '1.5px solid #6EE7B7';
+                        det.style.borderRadius = det.open ? '22px' : '999px';
+                        det.style.marginBottom = '12px';
+                        det.style.boxShadow = '0 6px 18px rgba(16, 185, 129, 0.12)';
+                        det.style.transition = 'all 0.25s ease';
+                        sum.style.background = 'linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%)';
+                        sum.style.color = '#064E3B';
+                        sum.style.fontWeight = '800';
+                        sum.style.borderRadius = det.open ? '20px 20px 12px 12px' : '999px';
+                        sum.style.padding = '11px 18px';
+                        sum.querySelectorAll('p, span').forEach(el => {
+                            el.style.color = '#064E3B';
+                            el.style.fontWeight = '800';
+                        });
+                    }
+                });
+            }
+
+            // 3. Asegurar líneas conectoras (estilo Impuestos) en todas las etiquetas externas del gráfico de torta (Req 4)
+            function asegurarLineasConectorasTortas() {
+                const pieLayers = doc.querySelectorAll('g.pielayer');
+                pieLayers.forEach(layer => {
+                    const traces = layer.querySelectorAll('g.trace');
+                    traces.forEach(trace => {
+                        const slices = Array.from(trace.querySelectorAll('g.slice'));
+                        if (slices.length === 0) return;
+
+                        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                        slices.forEach(sl => {
+                            const surf = sl.querySelector('path.surface');
+                            if (!surf || !surf.getBBox) return;
+                            try {
+                                const b = surf.getBBox();
+                                if (b.width > 0 && b.height > 0) {
+                                    minX = Math.min(minX, b.x);
+                                    minY = Math.min(minY, b.y);
+                                    maxX = Math.max(maxX, b.x + b.width);
+                                    maxY = Math.max(maxY, b.y + b.height);
+                                }
+                            } catch (e) {}
+                        });
+
+                        if (!isFinite(minX) || !isFinite(maxX)) return;
+                        const cx = (minX + maxX) / 2;
+                        const cy = (minY + maxY) / 2;
+                        const R = Math.max(maxX - minX, maxY - minY) / 2;
+                        if (R <= 10) return;
+
+                        slices.forEach(sl => {
+                            const existingLine = sl.querySelector('path.textline:not(.jardin-leader-line)');
+                            if (existingLine && (existingLine.getAttribute('d') || '').trim().length > 0) {
+                                existingLine.style.stroke = '#1F2937';
+                                existingLine.style.strokeWidth = '1.5px';
+                                const oldCustom = sl.querySelector('path.jardin-leader-line');
+                                if (oldCustom) oldCustom.remove();
+                                return;
+                            }
+
+                            const stext = sl.querySelector('g.slicetext');
+                            if (!stext || !stext.getBBox) return;
+                            try {
+                                const tb = stext.getBBox();
+                                if (tb.width === 0 && tb.height === 0) return;
+                                // Obtener posición real considerando transformaciones de Plotly sobre g.slicetext o text
+                                const textNode = stext.querySelector('text') || stext;
+                                let tx = tb.x + tb.width / 2;
+                                let ty = tb.y + tb.height / 2;
+                                const trAttr = textNode.getAttribute('transform') || stext.getAttribute('transform') || '';
+                                const m = trAttr.match(/translate\\(\\s*([-0-9.]+)[,\\s]+([-0-9.]+)/);
+                                if (m && Math.abs(tb.x) < 60 && Math.abs(tb.y) < 60) {
+                                    tx = parseFloat(m[1]);
+                                    ty = parseFloat(m[2]);
+                                }
+
+                                const dist = Math.hypot(tx - cx, ty - cy);
+
+                                // Si la etiqueta está fuera del círculo exterior de la torta, dibujar línea conectora con codo
+                                if (dist > R * 0.96) {
+                                    const angle = Math.atan2(ty - cy, tx - cx);
+                                    const sx = cx + (R - 2) * Math.cos(angle);
+                                    const sy = cy + (R - 2) * Math.sin(angle);
+                                    const ex = cx + (R + 10) * Math.cos(angle);
+                                    const ey = cy + (R + 10) * Math.sin(angle);
+
+                                    const dirX = tx >= cx ? 1 : -1;
+                                    const endX = ex + dirX * 6;
+                                    const endY = ey;
+
+                                    let customLine = sl.querySelector('path.jardin-leader-line');
+                                    if (!customLine) {
+                                        customLine = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+                                        customLine.setAttribute('class', 'textline jardin-leader-line');
+                                        customLine.style.fill = 'none';
+                                        customLine.style.stroke = '#1F2937';
+                                        customLine.style.strokeWidth = '1.5px';
+                                        customLine.style.strokeOpacity = '1';
+                                        sl.insertBefore(customLine, stext);
+                                    }
+                                    customLine.setAttribute(
+                                        'd',
+                                        'M' + sx.toFixed(1) + ',' + sy.toFixed(1) +
+                                        'L' + ex.toFixed(1) + ',' + ey.toFixed(1) +
+                                        'L' + endX.toFixed(1) + ',' + endY.toFixed(1)
+                                    );
+                                } else {
+                                    const oldLine = sl.querySelector('path.jardin-leader-line');
+                                    if (oldLine) oldLine.remove();
+                                }
+                            } catch (e) {}
+                        });
+                    });
+                });
+            }
+
+            // 4. Etiquetar todos los bloques de categorías
+            function obtenerBloqueMovible(det, refDet) {
+                let curr = det;
+                while (curr && curr.parentElement && !curr.parentElement.contains(refDet)) {
+                    curr = curr.parentElement;
+                }
+                return curr;
+            }
+
+            function etiquetarCategorias() {
+                limpiarInputsYPopups();
+                estilizarSolapasCategorias();
+                asegurarLineasConectorasTortas();
+
+                const expanders = Array.from(doc.querySelectorAll('details'));
+                const detsPorTipo = { costo: [], ingreso: [] };
+
+                const h3s = Array.from(doc.querySelectorAll('h3'));
+                const h3Ingresos = h3s.find(el => (el.innerText || '').includes('Mis Ingresos Mensuales'));
+
+                expanders.forEach(det => {
+                    const summary = det.querySelector('summary');
+                    if (!summary) return;
+                    const texto = summary.innerText || summary.textContent || '';
+                    if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
+
+                    const rawTc = summary.textContent || '';
+                    let tipo = 'costo';
+                    if (rawTc.includes('\\u200c')) {
+                        tipo = 'ingreso';
+                    } else if (rawTc.includes('\\u200b')) {
+                        tipo = 'costo';
+                    } else if (h3Ingresos) {
+                        const pos = h3Ingresos.compareDocumentPosition(det);
+                        tipo = (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? 'ingreso' : 'costo';
+                    }
+
+                    let catNombre = '';
+                    const strongEl = summary.querySelector('strong');
+                    if (strongEl && strongEl.innerText) {
+                        catNombre = strongEl.innerText.replace(/[\\u200b\\u200c]/g, '').trim();
+                    } else {
+                        const parte = texto.split('— Subtotal:')[0].replace('⠿', '').replace(/[\\u200b\\u200c]/g, '').trim();
+                        const tokens = parte.split(' ');
+                        if (tokens.length > 1) tokens.shift();
+                        catNombre = tokens.join(' ').trim();
+                    }
+
+                    det.setAttribute('data-cat-nombre', catNombre);
+                    det.setAttribute('data-cat-tipo', tipo);
+                    det.setAttribute('draggable', 'false');
+
+                    summary.style.cursor = 'grab';
+                    summary.style.userSelect = 'none';
+                    summary.style.webkitUserSelect = 'none';
+                    summary.style.touchAction = 'none';
+                    summary.setAttribute('draggable', 'false');
+
+                    detsPorTipo[tipo].push(det);
+                });
+
+                ['costo', 'ingreso'].forEach(tipo => {
+                    const listaDets = detsPorTipo[tipo];
+                    if (listaDets.length < 2) return;
+                    listaDets.forEach((d, i) => {
+                        const otro = listaDets[i === 0 ? 1 : 0];
+                        const b = obtenerBloqueMovible(d, otro);
+                        if (b) {
+                            b.setAttribute('data-cat-block-tipo', tipo);
+                            b.setAttribute('data-cat-block-nombre', d.getAttribute('data-cat-nombre'));
+                        }
+                    });
+                });
+            }
+
+            win.__jardinEtiquetar = etiquetarCategorias;
+
+            // 5. Navegación con flechas Arriba/Abajo entre inputs
             doc.addEventListener('keydown', function(e) {
                 const active = doc.activeElement;
                 if (!active || active.tagName !== 'INPUT') return;
@@ -259,8 +402,9 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                         }
                     }
                 }
-            }, true);
+            }, { capture: true, signal: sig });
 
+            // 6. Enviar nuevo orden a Streamlit (compatible con React 18)
             function enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrdenArray) {
                 const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
                 const targetInput = inputs.find(
@@ -268,11 +412,10 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                 );
                 if (!targetInput) return;
 
-                // Incluir timestamp único para que Streamlit siempre detecte el cambio aunque se vuelva a un orden previo
                 const valorJson = JSON.stringify({ orden: nuevoOrdenArray, ts: Date.now() });
 
-                const prevActive = doc.activeElement;
-                targetInput.focus();
+                targetInput.readOnly = false;
+                targetInput.focus({ preventScroll: true });
 
                 const nativeSetter = Object.getOwnPropertyDescriptor(
                     win.HTMLInputElement.prototype,
@@ -284,50 +427,56 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                     targetInput._valueTracker.setValue('');
                 }
 
-                targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-                targetInput.dispatchEvent(new Event('change', { bubbles: true }));
-                targetInput.dispatchEvent(new KeyboardEvent('keydown', {
-                    key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
-                }));
-                targetInput.dispatchEvent(new KeyboardEvent('keypress', {
-                    key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
-                }));
-                targetInput.dispatchEvent(new KeyboardEvent('keyup', {
-                    key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
-                }));
-                targetInput.blur();
-                if (prevActive && prevActive !== targetInput && prevActive.focus) {
-                    prevActive.focus();
-                }
+                targetInput.dispatchEvent(new win.Event('input', { bubbles: true, composed: true }));
+                targetInput.dispatchEvent(new win.Event('change', { bubbles: true, composed: true }));
+
+                setTimeout(() => {
+                    targetInput.focus({ preventScroll: true });
+                    const enterOpts = {
+                        key: 'Enter',
+                        code: 'Enter',
+                        keyCode: 13,
+                        which: 13,
+                        charCode: 13,
+                        bubbles: true,
+                        cancelable: true,
+                        composed: true
+                    };
+                    targetInput.dispatchEvent(new win.KeyboardEvent('keydown', enterOpts));
+                    targetInput.dispatchEvent(new win.KeyboardEvent('keypress', enterOpts));
+                    targetInput.dispatchEvent(new win.KeyboardEvent('keyup', enterOpts));
+                    targetInput.blur();
+                }, 45);
             }
 
-            // Estado global de arrastre por delegación de eventos en window.parent.document
+            // 7. Drag & Drop infinito en window.parent (Mouse, Pad de Notebook y Táctil Android)
             let dragState = null;
             let suppressNextSummaryClick = false;
 
             doc.addEventListener('dragstart', function(e) {
-                const sum = e.target && e.target.closest ? e.target.closest('summary') : null;
+                const sum = closestEl(e.target, 'summary');
                 if (sum && (sum.innerText || '').includes('⠿')) {
                     e.preventDefault();
                 }
-            }, true);
+            }, { capture: true, signal: sig });
 
             doc.addEventListener('pointerdown', function(e) {
                 if (e.button !== undefined && e.button !== 0) return;
-                if (!e.target || !e.target.closest) return;
-                if (['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA'].includes(e.target.tagName)) return;
+                const tgtEl = (e.target && e.target.nodeType === 1) ? e.target : (e.target ? e.target.parentElement : null);
+                if (!tgtEl) return;
+                if (['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA'].includes(tgtEl.tagName)) return;
 
-                const summary = e.target.closest('summary');
+                const summary = closestEl(tgtEl, 'summary');
                 if (!summary) return;
                 const texto = summary.innerText || summary.textContent || '';
                 if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
 
-                win.__jardinEtiquetar();
+                etiquetarCategorias();
 
-                const det = summary.closest('details');
+                const det = closestEl(summary, 'details');
                 if (!det) return;
                 const tipo = det.getAttribute('data-cat-tipo');
-                const block = det.closest('[data-cat-block-tipo="' + tipo + '"]');
+                const block = closestEl(det, '[data-cat-block-tipo="' + tipo + '"]');
                 if (!block || !block.parentElement) return;
 
                 const sharedParent = block.parentElement;
@@ -336,30 +485,24 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                 );
                 if (bloquesIniciales.length < 2) return;
 
-                // Guardar nodo ancla siguiente del último bloque para restaurar el orden del Fiber de React antes del re-render
-                const ultimoBloque = bloquesIniciales[bloquesIniciales.length - 1];
-                const anchorAfterLast = ultimoBloque.nextSibling;
-
                 dragState = {
                     summary: summary,
                     det: det,
                     block: block,
                     tipo: tipo,
                     sharedParent: sharedParent,
-                    bloquesIniciales: bloquesIniciales,
                     ordenNombresInicial: bloquesIniciales.map(b => b.getAttribute('data-cat-block-nombre')),
-                    anchorAfterLast: anchorAfterLast,
                     startY: e.clientY,
                     pointerId: e.pointerId,
                     isDragging: false
                 };
-            }, true);
+            }, { capture: true, signal: sig });
 
             doc.addEventListener('pointermove', function(e) {
                 if (!dragState) return;
                 const dy = e.clientY - dragState.startY;
 
-                if (!dragState.isDragging && Math.abs(dy) > 5) {
+                if (!dragState.isDragging && Math.abs(dy) > 4) {
                     dragState.isDragging = true;
                     try {
                         if (dragState.pointerId !== null && dragState.summary.setPointerCapture) {
@@ -369,13 +512,13 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                     dragState.summary.style.cursor = 'grabbing';
                     dragState.block.style.opacity = '0.84';
                     dragState.block.style.transform = 'scale(1.01)';
-                    dragState.block.style.boxShadow = '0 10px 26px rgba(126, 34, 206, 0.26)';
+                    dragState.block.style.boxShadow = '0 12px 28px rgba(124, 58, 237, 0.26)';
                     dragState.block.style.zIndex = '999';
                     dragState.block.style.position = 'relative';
                 }
 
                 if (dragState.isDragging) {
-                    e.preventDefault();
+                    if (e.cancelable) e.preventDefault();
                     const { sharedParent, tipo, block } = dragState;
                     const otros = Array.from(
                         sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
@@ -403,7 +546,7 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                         }
                     }
                 }
-            }, { passive: false, capture: true });
+            }, { passive: false, capture: true, signal: sig });
 
             function finalizarDragGlobal(e) {
                 if (!dragState) return;
@@ -430,42 +573,61 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                         st.sharedParent.querySelectorAll('[data-cat-block-tipo="' + st.tipo + '"]')
                     ).map(el => el.getAttribute('data-cat-block-nombre')).filter(Boolean);
 
-                    const cambio = JSON.stringify(nuevoOrden) !== JSON.stringify(st.ordenNombresInicial);
-                    if (cambio && nuevoOrden.length === st.ordenNombresInicial.length) {
-                        // Restaurar el orden físico de los nodos Fiber antes de que React reconcilie el nuevo orden
-                        st.bloquesIniciales.forEach(b => {
-                            st.sharedParent.insertBefore(b, st.anchorAfterLast);
-                        });
+                    if (JSON.stringify(nuevoOrden) !== JSON.stringify(st.ordenNombresInicial)) {
                         const placeholderKey = st.tipo === 'costo' ? 'SYNC_ORDEN_COSTOS' : 'SYNC_ORDEN_INGRESOS';
                         enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrden);
                     }
                 }
             }
 
-            doc.addEventListener('pointerup', finalizarDragGlobal, true);
-            doc.addEventListener('pointercancel', finalizarDragGlobal, true);
+            doc.addEventListener('pointerup', finalizarDragGlobal, { capture: true, signal: sig });
+            doc.addEventListener('pointercancel', finalizarDragGlobal, { capture: true, signal: sig });
 
             doc.addEventListener('click', function(e) {
                 if (suppressNextSummaryClick) {
-                    const sum = e.target && e.target.closest ? e.target.closest('summary') : null;
+                    const sum = closestEl(e.target, 'summary');
                     if (sum) {
                         e.preventDefault();
                         e.stopPropagation();
                         suppressNextSummaryClick = false;
                     }
                 }
-            }, true);
+            }, { capture: true, signal: sig });
 
             let timerObs = null;
             const obs = new MutationObserver(() => {
                 clearTimeout(timerObs);
                 timerObs = setTimeout(() => {
-                    if (win.__jardinEtiquetar && !dragState) {
-                        win.__jardinEtiquetar();
+                    if (!dragState) {
+                        etiquetarCategorias();
                     }
-                }, 140);
+                }, 110);
             });
             obs.observe(doc.body, { childList: true, subtree: true });
+
+            win.__jardinCleanup = function() {
+                abortCtrl.abort();
+                obs.disconnect();
+            };
+
+            etiquetarCategorias();
+            setTimeout(etiquetarCategorias, 180);
+            setTimeout(etiquetarCategorias, 500);
+        })();
+        `;
+
+        if (!win.__jardinEngineVersion || win.__jardinEngineVersion !== 5) {
+            win.__jardinEngineVersion = 5;
+            const prevScript = doc.getElementById('jardin-parent-engine');
+            if (prevScript) prevScript.remove();
+            const scriptEl = doc.createElement('script');
+            scriptEl.id = 'jardin-parent-engine';
+            scriptEl.textContent = engineCode;
+            (doc.head || doc.documentElement).appendChild(scriptEl);
+        } else if (win.__jardinEtiquetar) {
+            win.__jardinEtiquetar();
+            setTimeout(win.__jardinEtiquetar, 150);
+            setTimeout(win.__jardinEtiquetar, 450);
         }
     })();
     </script>
@@ -473,13 +635,12 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
     components.html(js_code, height=0, width=0)
 
 
-# ----------------- GRÁFICO DE TORTA 2D CON LÍNEAS EXTERNAS -----------------
+# ----------------- GRÁFICO DE TORTA 2D CON 1 DECIMAL Y SIN POP-UPS (REQ 3 y 4) -----------------
 def formatear_etiqueta_torta(texto, usar_minusculas=False):
     t = str(texto or "").strip()
     if not t:
         return t
     if usar_minusculas:
-        # Primera letra en mayúscula y el resto en minúscula para que sea más prolijo, legible y ocupe menos espacio
         return t[0].upper() + t[1:].lower()
     return t
 
@@ -492,8 +653,14 @@ def crear_torta_2d(df, col_valores, col_nombres, tamano="mediano", usar_minuscul
 
     colores = [PALETA_PASTEL[i % len(PALETA_PASTEL)] for i in range(n)]
 
-    # En gráficos con más categorías, sacar hacia afuera las porciones menores al 10% para que nunca se amontonen
-    umbral_externo = 0.10 if tamano == "grande" else 0.08
+    # Etiquetas personalizadas con exactamente 1 decimal en el porcentaje (ej: 57,2% o 0,8%)
+    textos_torta = [
+        f"{nom}<br>{((v / total) * 100):.1f}%".replace(".", ",")
+        for nom, v in zip(nombres, valores)
+    ]
+
+    # Sacar hacia afuera las porciones chicas (< 9%) y conectarlas siempre con línea guía
+    umbral_externo = 0.09 if tamano == "grande" else 0.08
     posiciones = [
         "outside" if (v / total) < umbral_externo else "inside"
         for v in valores
@@ -504,28 +671,31 @@ def crear_torta_2d(df, col_valores, col_nombres, tamano="mediano", usar_minuscul
         tam_fuente = 14
         min_fuente = 12
         agujero = 0.32
-        margenes = dict(t=45, b=45, l=45, r=45)
+        margenes = dict(t=50, b=50, l=55, r=55)
     elif tamano == "chico":
         altura = 350
         tam_fuente = 14
         min_fuente = 12
         agujero = 0.38
-        margenes = dict(t=35, b=35, l=45, r=45)
+        margenes = dict(t=42, b=42, l=50, r=50)
     else:
         altura = 430
         tam_fuente = 14
         min_fuente = 12
         agujero = 0.36
-        margenes = dict(t=35, b=35, l=30, r=30)
+        margenes = dict(t=40, b=40, l=40, r=40)
 
     fig = go.Figure(data=[go.Pie(
         labels=nombres,
         values=valores,
+        text=textos_torta,
+        textinfo="text",
+        hoverinfo="skip",
+        hovertemplate=None,
         hole=agujero,
         sort=True,
         direction="clockwise",
         textposition=posiciones,
-        textinfo="label+percent",
         insidetextorientation="horizontal",
         pull=[0.012] * n,
         automargin=True,
@@ -547,7 +717,8 @@ def crear_torta_2d(df, col_valores, col_nombres, tamano="mediano", usar_minuscul
         margin=margenes,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        dragmode=False
+        dragmode=False,
+        hovermode=False
     )
     return fig
 
@@ -1300,29 +1471,55 @@ st.markdown("""
         font-size: 1.1rem !important;
     }
 
-    /* Solapas principales en MAYÚSCULAS (Req 5) */
+    /* Solapas principales estilo Cápsula Tecnológica Flotante (Req 7) */
+    .stTabs [data-baseweb="tab-highlight"],
+    .stTabs [data-baseweb="tab-border"] {
+        display: none !important;
+        height: 0px !important;
+        background: transparent !important;
+    }
     .stTabs [data-baseweb="tab-list"] {
-        gap: 18px;
-        margin-bottom: 1rem;
+        gap: 14px !important;
+        margin-bottom: 1.35rem !important;
+        padding: 8px 10px !important;
+        background: linear-gradient(135deg, rgba(234, 246, 238, 0.9) 0%, rgba(243, 232, 255, 0.95) 100%) !important;
+        border-radius: 999px !important;
+        border: 1.5px solid rgba(192, 132, 252, 0.35) !important;
+        box-shadow: 0 10px 28px rgba(91, 75, 138, 0.10), inset 0 1px 2px rgba(255, 255, 255, 0.9) !important;
+        width: fit-content !important;
+        max-width: 100% !important;
     }
     .stTabs [data-baseweb="tab"] {
-        height: 60px !important;
-        padding: 12px 30px !important;
-        background-color: #F3F4F6 !important;
-        border-radius: 14px 14px 0px 0px !important;
-        border: 1px solid #E5E7EB !important;
+        height: 54px !important;
+        padding: 10px 28px !important;
+        background: rgba(255, 255, 255, 0.72) !important;
+        border-radius: 999px !important;
+        border: 1px solid rgba(216, 180, 254, 0.45) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+        transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        background: rgba(255, 255, 255, 0.96) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 16px rgba(124, 58, 237, 0.15) !important;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #F3E8FF !important;
-        border: 2px solid #C084FC !important;
-        border-bottom: 4px solid #7E22CE !important;
+        background: linear-gradient(135deg, #5B21B6 0%, #7C3AED 52%, #2D6A4F 100%) !important;
+        border: 1.5px solid rgba(255, 255, 255, 0.65) !important;
+        box-shadow: 0 8px 22px rgba(124, 58, 237, 0.38) !important;
+        transform: translateY(-1px) !important;
     }
     .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 1.4rem !important;
+        font-size: 1.2rem !important;
         font-weight: 800 !important;
         color: #4A235A !important;
         text-transform: uppercase !important;
-        letter-spacing: 0.4px !important;
+        letter-spacing: 0.7px !important;
+        margin: 0 !important;
+    }
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] [data-testid="stMarkdownContainer"] p {
+        color: #FFFFFF !important;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.22) !important;
     }
 
     .metric-card {
@@ -1449,7 +1646,15 @@ st.markdown("""
     }
 
     details {
-        border-radius: 12px !important;
+        border-radius: 18px !important;
+        border: 1px solid #E5E7EB !important;
+        background: #FFFFFF !important;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.03) !important;
+        transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+    }
+    details:hover {
+        border-color: #C084FC !important;
+        box-shadow: 0 6px 16px rgba(124, 58, 237, 0.08) !important;
     }
 
     /* Ocultar los inputs puente usados para sincronizar el Drag & Drop */
@@ -1723,14 +1928,12 @@ with st.sidebar:
         smtp_conf = st.text_input(
             "Clave App Gmail (opcional p/ envío directo):",
             value=seg_actual.get("smtp_app_password", ""),
-            type="password",
             help="Contraseña de aplicación de 16 letras de Google (opcional).",
             key="side_smtp_rec"
         )
         wa_conf = st.text_input(
             "API Key WhatsApp CallMeBot (opcional):",
             value=seg_actual.get("whatsapp_apikey", ""),
-            type="password",
             help="Enviá 'I allow callmebot to send me messages' al +34 644 52 74 88 por WhatsApp para obtener tu clave gratis.",
             key="side_wa_rec"
         )
@@ -2317,13 +2520,14 @@ with pestana1:
     st.markdown("---")
 
     st.markdown(
-        "<h3 style='color: #5B4B8A;'>📊 Gráficos y Subtotales</h3>",
+        "<h3 style='color: #5B4B8A;'>📊 Gráficos y Tablas</h3>",
         unsafe_allow_html=True
     )
     modo_grafico = st.radio(
-        "Ver gráficos según:",
+        "Modo de gráficos",
         ["Por Categoría (Subtotales)", "Detallado por cada Subcategoría"],
-        horizontal=True
+        horizontal=True,
+        label_visibility="collapsed"
     )
 
     proporcion_cols_grafico = [1.4, 0.9] if modo_grafico.startswith("Por Categoría") else [1, 1]
@@ -2331,7 +2535,7 @@ with pestana1:
 
     with col_chart_c:
         st.markdown(
-            "<h4 style='color: #A04000; text-align: center;'>Distribución de Costos Activos</h4>",
+            "<h4 style='color: #A04000; text-align: center;'>Distribución de Costos</h4>",
             unsafe_allow_html=True
         )
         if costos_activos and total_costos > 0:
@@ -2364,7 +2568,7 @@ with pestana1:
 
     with col_chart_i:
         st.markdown(
-            "<h4 style='color: #117864; text-align: center;'>Distribución de Ingresos Activos</h4>",
+            "<h4 style='color: #117864; text-align: center;'>Distribución de Ingresos</h4>",
             unsafe_allow_html=True
         )
         if ingresos_activos and total_ingresos > 0:
