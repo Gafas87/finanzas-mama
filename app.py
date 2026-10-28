@@ -78,557 +78,564 @@ def predecir_icono_categoria(nombre, tipo="costo"):
 
 # ----------------- INTERACTIVIDAD: DRAG & DROP INFINITO, CONECTORES TORTA Y ANTI-POPUP -----------------
 def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
-    js_code = """
+    js_code = r"""
     <script>
     (function() {
         const win = window.parent;
         const doc = win.document;
 
-        // Inyectamos el motor directamente en window.parent.document.head
-        // para que viva en la ventana principal y NUNCA muera al cambiar de pantalla o re-renderizar iframes.
-        const engineCode = `
-        (function() {
-            const win = window;
-            const doc = document;
+        function closestEl(node, selector) {
+            let el = (node && node.nodeType === 1) ? node : (node ? node.parentElement : null);
+            return (el && el.closest) ? el.closest(selector) : null;
+        }
 
-            if (win.__jardinCleanup) {
-                try { win.__jardinCleanup(); } catch (e) {}
-            }
-
-            const abortCtrl = new AbortController();
-            const sig = abortCtrl.signal;
-
-            function closestEl(node, selector) {
-                let el = (node && node.nodeType === 1) ? node : (node ? node.parentElement : null);
-                return (el && el.closest) ? el.closest(selector) : null;
-            }
-
-            // 1. Ocultar "Press Enter to apply" y blindar inputs contra el popup de contraseñas guardadas (Req 5)
-            function limpiarInputsYPopups() {
-                const instrucciones = doc.querySelectorAll('[data-testid="InputInstructions"]');
-                instrucciones.forEach(el => {
-                    el.style.display = 'none';
-                    el.style.visibility = 'hidden';
-                });
-
-                const sidebar = doc.querySelector('[data-testid="stSidebar"]');
-                const inputs = doc.querySelectorAll('input');
-                inputs.forEach((inp, idx) => {
-                    const enSidebar = sidebar && sidebar.contains(inp);
-                    if (inp.getAttribute('data-clean-autofill') !== 'true') {
-                        inp.setAttribute('data-clean-autofill', 'true');
-                        inp.setAttribute('autocomplete', enSidebar ? 'one-time-code' : 'off');
-                        inp.setAttribute('autocorrect', 'off');
-                        inp.setAttribute('autocapitalize', 'off');
-                        inp.setAttribute('spellcheck', 'false');
-                        inp.setAttribute('data-ddg-inputtype', 'unknown');
-                        inp.setAttribute('data-1p-ignore', 'true');
-                        inp.setAttribute('data-lpignore', 'true');
-                        inp.setAttribute('data-bwignore', 'true');
-                        inp.setAttribute('data-form-type', 'other');
+        // 1. Envolver el emoji 🍀 de las solapas principales para darle 1.3em y opacidad 1 (activa) / 0.5 (inactiva)
+        function estilizarTrebolesSolapas() {
+            const tabs = doc.querySelectorAll('button[data-baseweb="tab"]');
+            tabs.forEach(tab => {
+                const isSelected = tab.getAttribute('aria-selected') === 'true';
+                const p = tab.querySelector('[data-testid="stMarkdownContainer"] p') || tab.querySelector('p');
+                if (p) {
+                    let spanClover = p.querySelector('.trebol-tab-icon');
+                    if (!spanClover && (p.textContent || '').includes('🍀')) {
+                        const textoLimpio = (p.textContent || '').replace('🍀', '').trim();
+                        p.innerHTML = '<span class="trebol-tab-icon">🍀</span><span>' + textoLimpio + '</span>';
+                        spanClover = p.querySelector('.trebol-tab-icon');
                     }
+                    if (spanClover) {
+                        spanClover.style.fontSize = '1.3em';
+                        spanClover.style.lineHeight = '1';
+                        spanClover.style.verticalAlign = 'middle';
+                        spanClover.style.marginRight = '8px';
+                        spanClover.style.display = 'inline-block';
+                        spanClover.style.transition = 'opacity 0.25s ease';
+                        spanClover.style.opacity = isSelected ? '1' : '0.5';
+                    }
+                }
+            });
+        }
 
-                    // En el panel lateral ("Mis Datos de Recuperación"), evitar que Chrome/Brave abra el gestor de contraseñas
-                    if (enSidebar && inp.type !== 'checkbox') {
-                        inp.setAttribute('autocomplete', 'one-time-code');
-                        inp.setAttribute('name', 'jardin_cfg_field_' + idx);
-                        const ariaLbl = (inp.getAttribute('aria-label') || '');
-                        if (ariaLbl.includes('Clave App') || ariaLbl.includes('API Key')) {
-                            inp.style.webkitTextSecurity = 'disc';
+        // 2. Ocultar "Press Enter to apply" y blindar inputs contra el popup de contraseñas guardadas
+        function limpiarInputsYPopups() {
+            const instrucciones = doc.querySelectorAll('[data-testid="InputInstructions"]');
+            instrucciones.forEach(el => {
+                el.style.display = 'none';
+                el.style.visibility = 'hidden';
+            });
+
+            const sidebar = doc.querySelector('[data-testid="stSidebar"]');
+            const inputs = doc.querySelectorAll('input');
+            inputs.forEach((inp, idx) => {
+                const enSidebar = sidebar && sidebar.contains(inp);
+                if (inp.getAttribute('data-clean-autofill') !== 'true') {
+                    inp.setAttribute('data-clean-autofill', 'true');
+                    inp.setAttribute('autocomplete', enSidebar ? 'one-time-code' : 'off');
+                    inp.setAttribute('autocorrect', 'off');
+                    inp.setAttribute('autocapitalize', 'off');
+                    inp.setAttribute('spellcheck', 'false');
+                    inp.setAttribute('data-ddg-inputtype', 'unknown');
+                    inp.setAttribute('data-1p-ignore', 'true');
+                    inp.setAttribute('data-lpignore', 'true');
+                    inp.setAttribute('data-bwignore', 'true');
+                    inp.setAttribute('data-form-type', 'other');
+                }
+
+                if (enSidebar && inp.type !== 'checkbox') {
+                    inp.setAttribute('autocomplete', 'one-time-code');
+                    inp.setAttribute('name', 'jardin_cfg_field_' + idx);
+                    const ariaLbl = (inp.getAttribute('aria-label') || '');
+                    if (ariaLbl.includes('Clave App') || ariaLbl.includes('API Key')) {
+                        inp.style.webkitTextSecurity = 'disc';
+                    }
+                    if (inp.getAttribute('data-readonly-shield') !== 'true') {
+                        inp.setAttribute('data-readonly-shield', 'true');
+                        if (doc.activeElement !== inp) {
+                            inp.readOnly = true;
                         }
-                        if (inp.getAttribute('data-readonly-shield') !== 'true') {
-                            inp.setAttribute('data-readonly-shield', 'true');
-                            if (doc.activeElement !== inp) {
-                                inp.readOnly = true;
+                        inp.addEventListener('pointerdown', function() {
+                            inp.readOnly = false;
+                        });
+                        inp.addEventListener('focus', function() {
+                            setTimeout(() => { inp.readOnly = false; }, 15);
+                        });
+                        inp.addEventListener('blur', function() {
+                            inp.readOnly = true;
+                        });
+                    }
+                }
+            });
+
+            const extNodes = doc.querySelectorAll('ddg-autofill, [data-ddg-autofill], .fx-relay-icon, firefox-private-relay-addon-data');
+            extNodes.forEach(n => n.remove());
+        }
+
+        // 3. Resaltar los desplegables "+ AGREGAR NUEVA CATEGORÍA DE COSTOS" y "DE INGRESOS" (Cambio 2)
+        function estilizarSolapasCategorias() {
+            const todosDetails = Array.from(doc.querySelectorAll('details'));
+            todosDetails.forEach(det => {
+                const sum = det.querySelector('summary');
+                if (!sum) return;
+                const txt = (sum.innerText || sum.textContent || '').toUpperCase();
+
+                if (txt.includes('AGREGAR NUEVA CATEGORÍA DE COSTOS')) {
+                    det.setAttribute('data-add-cat', 'costo');
+                    det.style.setProperty('background-color', '#FFF2EE', 'important');
+                    det.style.setProperty('border', '2px solid #E07A5F', 'important');
+                    det.style.setProperty('border-radius', '16px', 'important');
+                    det.style.setProperty('margin-bottom', '14px', 'important');
+                    det.style.setProperty('box-shadow', '0 4px 12px rgba(224, 122, 95, 0.16)', 'important');
+                    sum.style.setProperty('background-color', '#FADBD8', 'important');
+                    sum.style.setProperty('color', '#922B21', 'important');
+                    sum.style.setProperty('font-weight', '800', 'important');
+                    sum.style.setProperty('border-radius', '14px', 'important');
+                    sum.style.setProperty('padding', '12px 16px', 'important');
+                    sum.querySelectorAll('p, span, svg').forEach(el => {
+                        el.style.setProperty('color', '#922B21', 'important');
+                        el.style.setProperty('fill', '#922B21', 'important');
+                        el.style.setProperty('font-weight', '800', 'important');
+                    });
+                } else if (txt.includes('AGREGAR NUEVA CATEGORÍA DE INGRESOS')) {
+                    det.setAttribute('data-add-cat', 'ingreso');
+                    det.style.setProperty('background-color', '#ECFDF5', 'important');
+                    det.style.setProperty('border', '2px solid #48C9B0', 'important');
+                    det.style.setProperty('border-radius', '16px', 'important');
+                    det.style.setProperty('margin-bottom', '14px', 'important');
+                    det.style.setProperty('box-shadow', '0 4px 12px rgba(72, 201, 176, 0.16)', 'important');
+                    sum.style.setProperty('background-color', '#D1F2EB', 'important');
+                    sum.style.setProperty('color', '#0E6251', 'important');
+                    sum.style.setProperty('font-weight', '800', 'important');
+                    sum.style.setProperty('border-radius', '14px', 'important');
+                    sum.style.setProperty('padding', '12px 16px', 'important');
+                    sum.querySelectorAll('p, span, svg').forEach(el => {
+                        el.style.setProperty('color', '#0E6251', 'important');
+                        el.style.setProperty('fill', '#0E6251', 'important');
+                        el.style.setProperty('font-weight', '800', 'important');
+                    });
+                }
+            });
+        }
+
+        // 4. Asegurar líneas conectoras en todas las etiquetas externas del gráfico de torta
+        function asegurarLineasConectorasTortas() {
+            const pieLayers = doc.querySelectorAll('g.pielayer');
+            pieLayers.forEach(layer => {
+                const traces = layer.querySelectorAll('g.trace');
+                traces.forEach(trace => {
+                    const slices = Array.from(trace.querySelectorAll('g.slice'));
+                    if (slices.length === 0) return;
+
+                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                    slices.forEach(sl => {
+                        const surf = sl.querySelector('path.surface');
+                        if (!surf || !surf.getBBox) return;
+                        try {
+                            const b = surf.getBBox();
+                            if (b.width > 0 && b.height > 0) {
+                                minX = Math.min(minX, b.x);
+                                minY = Math.min(minY, b.y);
+                                maxX = Math.max(maxX, b.x + b.width);
+                                maxY = Math.max(maxY, b.y + b.height);
                             }
-                            inp.addEventListener('pointerdown', function() {
-                                inp.readOnly = false;
-                            });
-                            inp.addEventListener('focus', function() {
-                                setTimeout(() => { inp.readOnly = false; }, 15);
-                            });
-                            inp.addEventListener('blur', function() {
-                                inp.readOnly = true;
-                            });
+                        } catch (e) {}
+                    });
+
+                    if (!isFinite(minX) || !isFinite(maxX)) return;
+                    const cx = (minX + maxX) / 2;
+                    const cy = (minY + maxY) / 2;
+                    const R = Math.max(maxX - minX, maxY - minY) / 2;
+                    if (R <= 10) return;
+
+                    slices.forEach(sl => {
+                        const existingLine = sl.querySelector('path.textline:not(.jardin-leader-line)');
+                        if (existingLine && (existingLine.getAttribute('d') || '').trim().length > 0) {
+                            existingLine.style.stroke = '#1F2937';
+                            existingLine.style.strokeWidth = '1.5px';
+                            const oldCustom = sl.querySelector('path.jardin-leader-line');
+                            if (oldCustom) oldCustom.remove();
+                            return;
                         }
-                    }
-                });
 
-                const extNodes = doc.querySelectorAll('ddg-autofill, [data-ddg-autofill], .fx-relay-icon, firefox-private-relay-addon-data');
-                extNodes.forEach(n => n.remove());
-            }
+                        const stext = sl.querySelector('g.slicetext');
+                        if (!stext || !stext.getBBox) return;
+                        try {
+                            const tb = stext.getBBox();
+                            if (tb.width === 0 && tb.height === 0) return;
+                            const tx = tb.x + tb.width / 2;
+                            const ty = tb.y + tb.height / 2;
+                            const dist = Math.hypot(tx - cx, ty - cy);
 
-            // 2. Diseño moderno tipo cápsula tecnológica para las solapas de AGREGAR NUEVA CATEGORÍA
-            function estilizarSolapasCategorias() {
-                const todosDetails = Array.from(doc.querySelectorAll('details'));
-                todosDetails.forEach(det => {
-                    const sum = det.querySelector('summary');
-                    if (!sum) return;
-                    const txt = (sum.innerText || '').toUpperCase();
+                            if (dist > R * 0.96) {
+                                const angle = Math.atan2(ty - cy, tx - cx);
+                                const sx = cx + (R - 2) * Math.cos(angle);
+                                const sy = cy + (R - 2) * Math.sin(angle);
+                                const ex = cx + (R + 10) * Math.cos(angle);
+                                const ey = cy + (R + 10) * Math.sin(angle);
+                                const dirX = tx >= cx ? 1 : -1;
+                                const endX = ex + dirX * 6;
+                                const endY = ey;
 
-                    if (txt.includes('AGREGAR NUEVA CATEGORÍA DE COSTOS')) {
-                        det.style.background = 'linear-gradient(135deg, #FFF5F5 0%, #FFE3E3 100%)';
-                        det.style.border = '1.5px solid #FDA4AF';
-                        det.style.borderRadius = det.open ? '22px' : '999px';
-                        det.style.marginBottom = '12px';
-                        det.style.boxShadow = '0 6px 18px rgba(244, 63, 94, 0.12)';
-                        det.style.transition = 'all 0.25s ease';
-                        sum.style.background = 'linear-gradient(135deg, #FFE4E6 0%, #FECDD3 100%)';
-                        sum.style.color = '#881337';
-                        sum.style.fontWeight = '800';
-                        sum.style.borderRadius = det.open ? '20px 20px 12px 12px' : '999px';
-                        sum.style.padding = '11px 18px';
-                        sum.querySelectorAll('p, span').forEach(el => {
-                            el.style.color = '#881337';
-                            el.style.fontWeight = '800';
-                        });
-                    } else if (txt.includes('AGREGAR NUEVA CATEGORÍA DE INGRESOS')) {
-                        det.style.background = 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)';
-                        det.style.border = '1.5px solid #6EE7B7';
-                        det.style.borderRadius = det.open ? '22px' : '999px';
-                        det.style.marginBottom = '12px';
-                        det.style.boxShadow = '0 6px 18px rgba(16, 185, 129, 0.12)';
-                        det.style.transition = 'all 0.25s ease';
-                        sum.style.background = 'linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%)';
-                        sum.style.color = '#064E3B';
-                        sum.style.fontWeight = '800';
-                        sum.style.borderRadius = det.open ? '20px 20px 12px 12px' : '999px';
-                        sum.style.padding = '11px 18px';
-                        sum.querySelectorAll('p, span').forEach(el => {
-                            el.style.color = '#064E3B';
-                            el.style.fontWeight = '800';
-                        });
-                    }
-                });
-            }
-
-            // 3. Asegurar líneas conectoras (estilo Impuestos) en todas las etiquetas externas del gráfico de torta (Req 4)
-            function asegurarLineasConectorasTortas() {
-                const pieLayers = doc.querySelectorAll('g.pielayer');
-                pieLayers.forEach(layer => {
-                    const traces = layer.querySelectorAll('g.trace');
-                    traces.forEach(trace => {
-                        const slices = Array.from(trace.querySelectorAll('g.slice'));
-                        if (slices.length === 0) return;
-
-                        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                        slices.forEach(sl => {
-                            const surf = sl.querySelector('path.surface');
-                            if (!surf || !surf.getBBox) return;
-                            try {
-                                const b = surf.getBBox();
-                                if (b.width > 0 && b.height > 0) {
-                                    minX = Math.min(minX, b.x);
-                                    minY = Math.min(minY, b.y);
-                                    maxX = Math.max(maxX, b.x + b.width);
-                                    maxY = Math.max(maxY, b.y + b.height);
+                                let customLine = sl.querySelector('path.jardin-leader-line');
+                                if (!customLine) {
+                                    customLine = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+                                    customLine.setAttribute('class', 'textline jardin-leader-line');
+                                    customLine.style.fill = 'none';
+                                    customLine.style.stroke = '#1F2937';
+                                    customLine.style.strokeWidth = '1.5px';
+                                    customLine.style.strokeOpacity = '1';
+                                    sl.insertBefore(customLine, stext);
                                 }
-                            } catch (e) {}
-                        });
-
-                        if (!isFinite(minX) || !isFinite(maxX)) return;
-                        const cx = (minX + maxX) / 2;
-                        const cy = (minY + maxY) / 2;
-                        const R = Math.max(maxX - minX, maxY - minY) / 2;
-                        if (R <= 10) return;
-
-                        slices.forEach(sl => {
-                            const existingLine = sl.querySelector('path.textline:not(.jardin-leader-line)');
-                            if (existingLine && (existingLine.getAttribute('d') || '').trim().length > 0) {
-                                existingLine.style.stroke = '#1F2937';
-                                existingLine.style.strokeWidth = '1.5px';
-                                const oldCustom = sl.querySelector('path.jardin-leader-line');
-                                if (oldCustom) oldCustom.remove();
-                                return;
+                                customLine.setAttribute(
+                                    'd',
+                                    'M' + sx.toFixed(1) + ',' + sy.toFixed(1) +
+                                    'L' + ex.toFixed(1) + ',' + ey.toFixed(1) +
+                                    'L' + endX.toFixed(1) + ',' + endY.toFixed(1)
+                                );
+                            } else {
+                                const oldLine = sl.querySelector('path.jardin-leader-line');
+                                if (oldLine) oldLine.remove();
                             }
-
-                            const stext = sl.querySelector('g.slicetext');
-                            if (!stext || !stext.getBBox) return;
-                            try {
-                                const tb = stext.getBBox();
-                                if (tb.width === 0 && tb.height === 0) return;
-                                // Obtener posición real considerando transformaciones de Plotly sobre g.slicetext o text
-                                const textNode = stext.querySelector('text') || stext;
-                                let tx = tb.x + tb.width / 2;
-                                let ty = tb.y + tb.height / 2;
-                                const trAttr = textNode.getAttribute('transform') || stext.getAttribute('transform') || '';
-                                const m = trAttr.match(/translate\\(\\s*([-0-9.]+)[,\\s]+([-0-9.]+)/);
-                                if (m && Math.abs(tb.x) < 60 && Math.abs(tb.y) < 60) {
-                                    tx = parseFloat(m[1]);
-                                    ty = parseFloat(m[2]);
-                                }
-
-                                const dist = Math.hypot(tx - cx, ty - cy);
-
-                                // Si la etiqueta está fuera del círculo exterior de la torta, dibujar línea conectora con codo
-                                if (dist > R * 0.96) {
-                                    const angle = Math.atan2(ty - cy, tx - cx);
-                                    const sx = cx + (R - 2) * Math.cos(angle);
-                                    const sy = cy + (R - 2) * Math.sin(angle);
-                                    const ex = cx + (R + 10) * Math.cos(angle);
-                                    const ey = cy + (R + 10) * Math.sin(angle);
-
-                                    const dirX = tx >= cx ? 1 : -1;
-                                    const endX = ex + dirX * 6;
-                                    const endY = ey;
-
-                                    let customLine = sl.querySelector('path.jardin-leader-line');
-                                    if (!customLine) {
-                                        customLine = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
-                                        customLine.setAttribute('class', 'textline jardin-leader-line');
-                                        customLine.style.fill = 'none';
-                                        customLine.style.stroke = '#1F2937';
-                                        customLine.style.strokeWidth = '1.5px';
-                                        customLine.style.strokeOpacity = '1';
-                                        sl.insertBefore(customLine, stext);
-                                    }
-                                    customLine.setAttribute(
-                                        'd',
-                                        'M' + sx.toFixed(1) + ',' + sy.toFixed(1) +
-                                        'L' + ex.toFixed(1) + ',' + ey.toFixed(1) +
-                                        'L' + endX.toFixed(1) + ',' + endY.toFixed(1)
-                                    );
-                                } else {
-                                    const oldLine = sl.querySelector('path.jardin-leader-line');
-                                    if (oldLine) oldLine.remove();
-                                }
-                            } catch (e) {}
-                        });
+                        } catch (e) {}
                     });
                 });
+            });
+        }
+
+        // 5. Etiquetar todos los bloques de categorías (tanto para Costos como para Ingresos)
+        function obtenerBloqueMovible(det, refDet) {
+            let curr = det;
+            while (curr && curr.parentElement && !curr.parentElement.contains(refDet)) {
+                curr = curr.parentElement;
             }
+            return curr;
+        }
 
-            // 4. Etiquetar todos los bloques de categorías
-            function obtenerBloqueMovible(det, refDet) {
-                let curr = det;
-                while (curr && curr.parentElement && !curr.parentElement.contains(refDet)) {
-                    curr = curr.parentElement;
-                }
-                return curr;
-            }
+        function etiquetarCategorias() {
+            estilizarTrebolesSolapas();
+            limpiarInputsYPopups();
+            estilizarSolapasCategorias();
+            asegurarLineasConectorasTortas();
 
-            function etiquetarCategorias() {
-                limpiarInputsYPopups();
-                estilizarSolapasCategorias();
-                asegurarLineasConectorasTortas();
+            const expanders = Array.from(doc.querySelectorAll('details'));
+            const detsPorTipo = { costo: [], ingreso: [] };
 
-                const expanders = Array.from(doc.querySelectorAll('details'));
-                const detsPorTipo = { costo: [], ingreso: [] };
+            const h3s = Array.from(doc.querySelectorAll('h3'));
+            const h3Ingresos = h3s.find(el => (el.innerText || '').includes('Mis Ingresos Mensuales'));
 
-                const h3s = Array.from(doc.querySelectorAll('h3'));
-                const h3Ingresos = h3s.find(el => (el.innerText || '').includes('Mis Ingresos Mensuales'));
-
-                expanders.forEach(det => {
-                    const summary = det.querySelector('summary');
-                    if (!summary) return;
-                    const texto = summary.innerText || summary.textContent || '';
-                    if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
-
-                    const rawTc = summary.textContent || '';
-                    let tipo = 'costo';
-                    if (rawTc.includes('\\u200c')) {
-                        tipo = 'ingreso';
-                    } else if (rawTc.includes('\\u200b')) {
-                        tipo = 'costo';
-                    } else if (h3Ingresos) {
-                        const pos = h3Ingresos.compareDocumentPosition(det);
-                        tipo = (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? 'ingreso' : 'costo';
-                    }
-
-                    let catNombre = '';
-                    const strongEl = summary.querySelector('strong');
-                    if (strongEl && strongEl.innerText) {
-                        catNombre = strongEl.innerText.replace(/[\\u200b\\u200c]/g, '').trim();
-                    } else {
-                        const parte = texto.split('— Subtotal:')[0].replace('⠿', '').replace(/[\\u200b\\u200c]/g, '').trim();
-                        const tokens = parte.split(' ');
-                        if (tokens.length > 1) tokens.shift();
-                        catNombre = tokens.join(' ').trim();
-                    }
-
-                    det.setAttribute('data-cat-nombre', catNombre);
-                    det.setAttribute('data-cat-tipo', tipo);
-                    det.setAttribute('draggable', 'false');
-
-                    summary.style.cursor = 'grab';
-                    summary.style.userSelect = 'none';
-                    summary.style.webkitUserSelect = 'none';
-                    summary.style.touchAction = 'none';
-                    summary.setAttribute('draggable', 'false');
-
-                    detsPorTipo[tipo].push(det);
-                });
-
-                ['costo', 'ingreso'].forEach(tipo => {
-                    const listaDets = detsPorTipo[tipo];
-                    if (listaDets.length < 2) return;
-                    listaDets.forEach((d, i) => {
-                        const otro = listaDets[i === 0 ? 1 : 0];
-                        const b = obtenerBloqueMovible(d, otro);
-                        if (b) {
-                            b.setAttribute('data-cat-block-tipo', tipo);
-                            b.setAttribute('data-cat-block-nombre', d.getAttribute('data-cat-nombre'));
-                        }
-                    });
-                });
-            }
-
-            win.__jardinEtiquetar = etiquetarCategorias;
-
-            // 5. Navegación con flechas Arriba/Abajo entre inputs
-            doc.addEventListener('keydown', function(e) {
-                const active = doc.activeElement;
-                if (!active || active.tagName !== 'INPUT') return;
-
-                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                    const inputs = Array.from(
-                        doc.querySelectorAll(
-                            'input:not([disabled]):not([type="hidden"]):not([type="checkbox"])'
-                        )
-                    ).filter(el => el.offsetParent !== null &&
-                                   el.placeholder !== 'SYNC_ORDEN_COSTOS' &&
-                                   el.placeholder !== 'SYNC_ORDEN_INGRESOS');
-
-                    const idx = inputs.indexOf(active);
-                    if (idx !== -1) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const nextIdx = e.key === 'ArrowDown' ? idx + 1 : idx - 1;
-                        if (nextIdx >= 0 && nextIdx < inputs.length) {
-                            inputs[nextIdx].focus();
-                            if (inputs[nextIdx].select) {
-                                inputs[nextIdx].select();
-                            }
-                        }
-                    }
-                }
-            }, { capture: true, signal: sig });
-
-            // 6. Enviar nuevo orden a Streamlit (compatible con React 18)
-            function enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrdenArray) {
-                const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
-                const targetInput = inputs.find(
-                    el => el.placeholder === placeholderKey || el.getAttribute('aria-label') === placeholderKey
-                );
-                if (!targetInput) return;
-
-                const valorJson = JSON.stringify({ orden: nuevoOrdenArray, ts: Date.now() });
-
-                targetInput.readOnly = false;
-                targetInput.focus({ preventScroll: true });
-
-                const nativeSetter = Object.getOwnPropertyDescriptor(
-                    win.HTMLInputElement.prototype,
-                    'value'
-                ).set;
-                nativeSetter.call(targetInput, valorJson);
-
-                if (targetInput._valueTracker) {
-                    targetInput._valueTracker.setValue('');
-                }
-
-                targetInput.dispatchEvent(new win.Event('input', { bubbles: true, composed: true }));
-                targetInput.dispatchEvent(new win.Event('change', { bubbles: true, composed: true }));
-
-                setTimeout(() => {
-                    targetInput.focus({ preventScroll: true });
-                    const enterOpts = {
-                        key: 'Enter',
-                        code: 'Enter',
-                        keyCode: 13,
-                        which: 13,
-                        charCode: 13,
-                        bubbles: true,
-                        cancelable: true,
-                        composed: true
-                    };
-                    targetInput.dispatchEvent(new win.KeyboardEvent('keydown', enterOpts));
-                    targetInput.dispatchEvent(new win.KeyboardEvent('keypress', enterOpts));
-                    targetInput.dispatchEvent(new win.KeyboardEvent('keyup', enterOpts));
-                    targetInput.blur();
-                }, 45);
-            }
-
-            // 7. Drag & Drop infinito en window.parent (Mouse, Pad de Notebook y Táctil Android)
-            let dragState = null;
-            let suppressNextSummaryClick = false;
-
-            doc.addEventListener('dragstart', function(e) {
-                const sum = closestEl(e.target, 'summary');
-                if (sum && (sum.innerText || '').includes('⠿')) {
-                    e.preventDefault();
-                }
-            }, { capture: true, signal: sig });
-
-            doc.addEventListener('pointerdown', function(e) {
-                if (e.button !== undefined && e.button !== 0) return;
-                const tgtEl = (e.target && e.target.nodeType === 1) ? e.target : (e.target ? e.target.parentElement : null);
-                if (!tgtEl) return;
-                if (['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA'].includes(tgtEl.tagName)) return;
-
-                const summary = closestEl(tgtEl, 'summary');
+            expanders.forEach(det => {
+                const summary = det.querySelector('summary');
                 if (!summary) return;
                 const texto = summary.innerText || summary.textContent || '';
                 if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
 
-                etiquetarCategorias();
-
-                const det = closestEl(summary, 'details');
-                if (!det) return;
-                const tipo = det.getAttribute('data-cat-tipo');
-                const block = closestEl(det, '[data-cat-block-tipo="' + tipo + '"]');
-                if (!block || !block.parentElement) return;
-
-                const sharedParent = block.parentElement;
-                const bloquesIniciales = Array.from(
-                    sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
-                );
-                if (bloquesIniciales.length < 2) return;
-
-                dragState = {
-                    summary: summary,
-                    det: det,
-                    block: block,
-                    tipo: tipo,
-                    sharedParent: sharedParent,
-                    ordenNombresInicial: bloquesIniciales.map(b => b.getAttribute('data-cat-block-nombre')),
-                    startY: e.clientY,
-                    pointerId: e.pointerId,
-                    isDragging: false
-                };
-            }, { capture: true, signal: sig });
-
-            doc.addEventListener('pointermove', function(e) {
-                if (!dragState) return;
-                const dy = e.clientY - dragState.startY;
-
-                if (!dragState.isDragging && Math.abs(dy) > 4) {
-                    dragState.isDragging = true;
-                    try {
-                        if (dragState.pointerId !== null && dragState.summary.setPointerCapture) {
-                            dragState.summary.setPointerCapture(dragState.pointerId);
-                        }
-                    } catch (err) {}
-                    dragState.summary.style.cursor = 'grabbing';
-                    dragState.block.style.opacity = '0.84';
-                    dragState.block.style.transform = 'scale(1.01)';
-                    dragState.block.style.boxShadow = '0 12px 28px rgba(124, 58, 237, 0.26)';
-                    dragState.block.style.zIndex = '999';
-                    dragState.block.style.position = 'relative';
+                const rawTc = summary.textContent || '';
+                let tipo = 'costo';
+                if (rawTc.includes('‌')) {
+                    tipo = 'ingreso';
+                } else if (rawTc.includes('​')) {
+                    tipo = 'costo';
+                } else if (h3Ingresos) {
+                    const pos = h3Ingresos.compareDocumentPosition(det);
+                    tipo = (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? 'ingreso' : 'costo';
                 }
 
-                if (dragState.isDragging) {
-                    if (e.cancelable) e.preventDefault();
-                    const { sharedParent, tipo, block } = dragState;
-                    const otros = Array.from(
-                        sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
-                    ).filter(h => h !== block);
+                let catNombre = '';
+                const strongEl = summary.querySelector('strong');
+                if (strongEl && strongEl.innerText) {
+                    catNombre = strongEl.innerText.replace(/[​‌]/g, '').trim();
+                } else {
+                    const parte = texto.split('— Subtotal:')[0].replace('⠿', '').replace(/[​‌]/g, '').trim();
+                    const tokens = parte.split(' ');
+                    if (tokens.length > 1) tokens.shift();
+                    catNombre = tokens.join(' ').trim();
+                }
 
-                    if (otros.length > 0) {
-                        let siguiente = null;
-                        for (const herm of otros) {
-                            const rect = herm.getBoundingClientRect();
-                            const centro = rect.top + rect.height / 2;
-                            if (e.clientY < centro) {
-                                siguiente = herm;
-                                break;
-                            }
-                        }
-                        if (siguiente) {
-                            if (block.nextElementSibling !== siguiente) {
-                                sharedParent.insertBefore(block, siguiente);
-                            }
-                        } else {
-                            const ultimo = otros[otros.length - 1];
-                            if (ultimo.nextElementSibling !== block) {
-                                sharedParent.insertBefore(block, ultimo.nextSibling);
-                            }
+                det.setAttribute('data-cat-nombre', catNombre);
+                det.setAttribute('data-cat-tipo', tipo);
+                det.setAttribute('draggable', 'false');
+
+                summary.style.cursor = 'grab';
+                summary.style.userSelect = 'none';
+                summary.style.webkitUserSelect = 'none';
+                summary.style.touchAction = 'none';
+                summary.setAttribute('draggable', 'false');
+
+                detsPorTipo[tipo].push(det);
+            });
+
+            ['costo', 'ingreso'].forEach(tipo => {
+                const listaDets = detsPorTipo[tipo];
+                if (listaDets.length < 2) return;
+                listaDets.forEach((d, i) => {
+                    const otro = listaDets[i === 0 ? 1 : 0];
+                    const b = obtenerBloqueMovible(d, otro);
+                    if (b) {
+                        b.setAttribute('data-cat-block-tipo', tipo);
+                        b.setAttribute('data-cat-block-nombre', d.getAttribute('data-cat-nombre'));
+                    }
+                });
+            });
+        }
+
+        function enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrdenArray) {
+            const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
+            const targetInput = inputs.find(
+                el => el.placeholder === placeholderKey || el.getAttribute('aria-label') === placeholderKey
+            );
+            if (!targetInput) return;
+
+            const valorJson = JSON.stringify({ orden: nuevoOrdenArray, ts: Date.now() });
+
+            targetInput.readOnly = false;
+            targetInput.focus({ preventScroll: true });
+
+            const nativeSetter = Object.getOwnPropertyDescriptor(
+                win.HTMLInputElement.prototype,
+                'value'
+            ).set;
+            nativeSetter.call(targetInput, valorJson);
+
+            if (targetInput._valueTracker) {
+                targetInput._valueTracker.setValue('');
+            }
+
+            targetInput.dispatchEvent(new win.Event('input', { bubbles: true, composed: true }));
+            targetInput.dispatchEvent(new win.Event('change', { bubbles: true, composed: true }));
+
+            setTimeout(() => {
+                targetInput.focus({ preventScroll: true });
+                const enterOpts = {
+                    key: 'Enter',
+                    code: 'Enter',
+                    keyCode: 13,
+                    which: 13,
+                    charCode: 13,
+                    bubbles: true,
+                    cancelable: true,
+                    composed: true
+                };
+                targetInput.dispatchEvent(new win.KeyboardEvent('keydown', enterOpts));
+                targetInput.dispatchEvent(new win.KeyboardEvent('keypress', enterOpts));
+                targetInput.dispatchEvent(new win.KeyboardEvent('keyup', enterOpts));
+                targetInput.blur();
+            }, 45);
+        }
+
+        // Limpiar listeners previos en window.parent (si hubiera de un iframe anterior) y registrar nuevos activos
+        if (win.__jardinCleanupListeners) {
+            try { win.__jardinCleanupListeners(); } catch (e) {}
+        }
+
+        const abortCtrl = new AbortController();
+        const sig = abortCtrl.signal;
+
+        // Navegación con flechas Arriba/Abajo entre inputs
+        doc.addEventListener('keydown', function(e) {
+            const active = doc.activeElement;
+            if (!active || active.tagName !== 'INPUT') return;
+
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                const inputs = Array.from(
+                    doc.querySelectorAll(
+                        'input:not([disabled]):not([type="hidden"]):not([type="checkbox"])'
+                    )
+                ).filter(el => el.offsetParent !== null &&
+                               el.placeholder !== 'SYNC_ORDEN_COSTOS' &&
+                               el.placeholder !== 'SYNC_ORDEN_INGRESOS');
+
+                const idx = inputs.indexOf(active);
+                if (idx !== -1) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const nextIdx = e.key === 'ArrowDown' ? idx + 1 : idx - 1;
+                    if (nextIdx >= 0 && nextIdx < inputs.length) {
+                        inputs[nextIdx].focus();
+                        if (inputs[nextIdx].select) {
+                            inputs[nextIdx].select();
                         }
                     }
                 }
-            }, { passive: false, capture: true, signal: sig });
+            }
+        }, { capture: true, signal: sig });
 
-            function finalizarDragGlobal(e) {
-                if (!dragState) return;
-                const st = dragState;
-                dragState = null;
+        // Drag & Drop con mouse y touchpad + sincronización inmediata
+        let dragState = null;
+        let suppressNextSummaryClick = false;
 
-                if (st.isDragging) {
-                    try {
-                        if (st.pointerId !== null && st.summary.releasePointerCapture) {
-                            st.summary.releasePointerCapture(st.pointerId);
+        doc.addEventListener('dragstart', function(e) {
+            const sum = closestEl(e.target, 'summary');
+            if (sum && (sum.innerText || '').includes('⠿')) {
+                e.preventDefault();
+            }
+        }, { capture: true, signal: sig });
+
+        doc.addEventListener('pointerdown', function(e) {
+            if (e.button !== undefined && e.button !== 0) return;
+            const tgtEl = (e.target && e.target.nodeType === 1) ? e.target : (e.target ? e.target.parentElement : null);
+            if (!tgtEl) return;
+            if (['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA'].includes(tgtEl.tagName) || closestEl(tgtEl, 'button')) return;
+
+            const summary = closestEl(tgtEl, 'summary');
+            if (!summary) return;
+            const texto = summary.innerText || summary.textContent || '';
+            if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
+
+            etiquetarCategorias();
+
+            const det = closestEl(summary, 'details');
+            if (!det) return;
+            const tipo = det.getAttribute('data-cat-tipo');
+            const block = closestEl(det, '[data-cat-block-tipo="' + tipo + '"]');
+            if (!block || !block.parentElement) return;
+
+            const sharedParent = block.parentElement;
+            const bloquesIniciales = Array.from(
+                sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
+            );
+            if (bloquesIniciales.length < 2) return;
+
+            dragState = {
+                summary: summary,
+                det: det,
+                block: block,
+                tipo: tipo,
+                sharedParent: sharedParent,
+                startIdx: bloquesIniciales.indexOf(block),
+                ordenNombresInicial: bloquesIniciales.map(b => b.getAttribute('data-cat-block-nombre')),
+                startY: e.clientY,
+                pointerId: e.pointerId,
+                isDragging: false
+            };
+        }, { capture: true, signal: sig });
+
+        doc.addEventListener('pointermove', function(e) {
+            if (!dragState) return;
+            const dy = e.clientY - dragState.startY;
+
+            if (!dragState.isDragging && Math.abs(dy) > 4) {
+                dragState.isDragging = true;
+                try {
+                    if (dragState.pointerId !== null && dragState.summary.setPointerCapture) {
+                        dragState.summary.setPointerCapture(dragState.pointerId);
+                    }
+                } catch (err) {}
+                dragState.summary.style.cursor = 'grabbing';
+                dragState.block.style.opacity = '0.86';
+                dragState.block.style.transform = 'scale(1.01)';
+                dragState.block.style.boxShadow = '0 10px 24px rgba(45, 106, 79, 0.22)';
+                dragState.block.style.zIndex = '999';
+                dragState.block.style.position = 'relative';
+            }
+
+            if (dragState.isDragging) {
+                if (e.cancelable) e.preventDefault();
+                const { sharedParent, tipo, block } = dragState;
+                const otros = Array.from(
+                    sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
+                ).filter(h => h !== block);
+
+                if (otros.length > 0) {
+                    let siguiente = null;
+                    for (const herm of otros) {
+                        const rect = herm.getBoundingClientRect();
+                        const centro = rect.top + rect.height / 2;
+                        if (e.clientY < centro) {
+                            siguiente = herm;
+                            break;
                         }
-                    } catch (err) {}
+                    }
+                    if (siguiente) {
+                        if (block.nextElementSibling !== siguiente) {
+                            sharedParent.insertBefore(block, siguiente);
+                        }
+                    } else {
+                        const ultimo = otros[otros.length - 1];
+                        if (ultimo.nextElementSibling !== block) {
+                            sharedParent.insertBefore(block, ultimo.nextSibling);
+                        }
+                    }
+                }
+            }
+        }, { passive: false, capture: true, signal: sig });
 
-                    st.summary.style.cursor = 'grab';
-                    st.block.style.opacity = '1';
-                    st.block.style.transform = 'none';
-                    st.block.style.boxShadow = 'none';
-                    st.block.style.zIndex = '';
+        function finalizarDragGlobal(e) {
+            if (!dragState) return;
+            const st = dragState;
+            dragState = null;
 
-                    suppressNextSummaryClick = true;
-                    setTimeout(() => { suppressNextSummaryClick = false; }, 300);
+            if (st.isDragging) {
+                try {
+                    if (st.pointerId !== null && st.summary.releasePointerCapture) {
+                        st.summary.releasePointerCapture(st.pointerId);
+                    }
+                } catch (err) {}
 
-                    const nuevoOrden = Array.from(
-                        st.sharedParent.querySelectorAll('[data-cat-block-tipo="' + st.tipo + '"]')
-                    ).map(el => el.getAttribute('data-cat-block-nombre')).filter(Boolean);
+                st.summary.style.cursor = 'grab';
+                st.block.style.opacity = '1';
+                st.block.style.transform = 'none';
+                st.block.style.boxShadow = 'none';
+                st.block.style.zIndex = '';
 
-                    if (JSON.stringify(nuevoOrden) !== JSON.stringify(st.ordenNombresInicial)) {
+                suppressNextSummaryClick = true;
+                setTimeout(() => { suppressNextSummaryClick = false; }, 300);
+
+                const bloquesFinales = Array.from(
+                    st.sharedParent.querySelectorAll('[data-cat-block-tipo="' + st.tipo + '"]')
+                );
+                const endIdx = bloquesFinales.indexOf(st.block);
+                const nuevoOrden = bloquesFinales.map(el => el.getAttribute('data-cat-block-nombre')).filter(Boolean);
+
+                if (JSON.stringify(nuevoOrden) !== JSON.stringify(st.ordenNombresInicial)) {
+                    // Si se movió 1 posición, accionar directamente el botón nativo ▲ o ▼ para guardado instantáneo
+                    const btns = Array.from(st.block.querySelectorAll('button'));
+                    const btnSubir = btns.find(b => (b.innerText || '').includes('▲'));
+                    const btnBajar = btns.find(b => (b.innerText || '').includes('▼'));
+
+                    if (endIdx === st.startIdx - 1 && btnSubir && !btnSubir.disabled) {
+                        btnSubir.click();
+                    } else if (endIdx === st.startIdx + 1 && btnBajar && !btnBajar.disabled) {
+                        btnBajar.click();
+                    } else {
                         const placeholderKey = st.tipo === 'costo' ? 'SYNC_ORDEN_COSTOS' : 'SYNC_ORDEN_INGRESOS';
                         enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrden);
                     }
                 }
             }
-
-            doc.addEventListener('pointerup', finalizarDragGlobal, { capture: true, signal: sig });
-            doc.addEventListener('pointercancel', finalizarDragGlobal, { capture: true, signal: sig });
-
-            doc.addEventListener('click', function(e) {
-                if (suppressNextSummaryClick) {
-                    const sum = closestEl(e.target, 'summary');
-                    if (sum) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        suppressNextSummaryClick = false;
-                    }
-                }
-            }, { capture: true, signal: sig });
-
-            let timerObs = null;
-            const obs = new MutationObserver(() => {
-                clearTimeout(timerObs);
-                timerObs = setTimeout(() => {
-                    if (!dragState) {
-                        etiquetarCategorias();
-                    }
-                }, 110);
-            });
-            obs.observe(doc.body, { childList: true, subtree: true });
-
-            win.__jardinCleanup = function() {
-                abortCtrl.abort();
-                obs.disconnect();
-            };
-
-            etiquetarCategorias();
-            setTimeout(etiquetarCategorias, 180);
-            setTimeout(etiquetarCategorias, 500);
-        })();
-        `;
-
-        if (!win.__jardinEngineVersion || win.__jardinEngineVersion !== 5) {
-            win.__jardinEngineVersion = 5;
-            const prevScript = doc.getElementById('jardin-parent-engine');
-            if (prevScript) prevScript.remove();
-            const scriptEl = doc.createElement('script');
-            scriptEl.id = 'jardin-parent-engine';
-            scriptEl.textContent = engineCode;
-            (doc.head || doc.documentElement).appendChild(scriptEl);
-        } else if (win.__jardinEtiquetar) {
-            win.__jardinEtiquetar();
-            setTimeout(win.__jardinEtiquetar, 150);
-            setTimeout(win.__jardinEtiquetar, 450);
         }
+
+        doc.addEventListener('pointerup', finalizarDragGlobal, { capture: true, signal: sig });
+        doc.addEventListener('pointercancel', finalizarDragGlobal, { capture: true, signal: sig });
+
+        doc.addEventListener('click', function(e) {
+            if (suppressNextSummaryClick) {
+                const sum = closestEl(e.target, 'summary');
+                if (sum) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    suppressNextSummaryClick = false;
+                }
+            }
+            setTimeout(estilizarTrebolesSolapas, 30);
+        }, { capture: true, signal: sig });
+
+        let timerObs = null;
+        const obs = new MutationObserver(() => {
+            clearTimeout(timerObs);
+            timerObs = setTimeout(() => {
+                if (!dragState) {
+                    etiquetarCategorias();
+                }
+            }, 100);
+        });
+        obs.observe(doc.body, { childList: true, subtree: true });
+
+        win.__jardinCleanupListeners = function() {
+            abortCtrl.abort();
+            obs.disconnect();
+        };
+
+        etiquetarCategorias();
+        setTimeout(etiquetarCategorias, 150);
+        setTimeout(etiquetarCategorias, 450);
     })();
     </script>
     """
@@ -1471,55 +1478,161 @@ st.markdown("""
         font-size: 1.1rem !important;
     }
 
-    /* Solapas principales estilo Cápsula Tecnológica Flotante (Req 7) */
+    /* CAMBIO 1: Solapas principales estilo píldora pastel en armonía verde menta con 🍀 */
     .stTabs [data-baseweb="tab-highlight"],
     .stTabs [data-baseweb="tab-border"] {
         display: none !important;
         height: 0px !important;
-        background: transparent !important;
+        background: none !important;
+        border: none !important;
     }
     .stTabs [data-baseweb="tab-list"] {
-        gap: 14px !important;
-        margin-bottom: 1.35rem !important;
-        padding: 8px 10px !important;
-        background: linear-gradient(135deg, rgba(234, 246, 238, 0.9) 0%, rgba(243, 232, 255, 0.95) 100%) !important;
-        border-radius: 999px !important;
-        border: 1.5px solid rgba(192, 132, 252, 0.35) !important;
-        box-shadow: 0 10px 28px rgba(91, 75, 138, 0.10), inset 0 1px 2px rgba(255, 255, 255, 0.9) !important;
-        width: fit-content !important;
-        max-width: 100% !important;
+        gap: 18px !important;
+        margin-bottom: 1.4rem !important;
+        padding: 6px 2px !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        flex-wrap: wrap !important;
     }
+    button[data-baseweb="tab"],
     .stTabs [data-baseweb="tab"] {
-        height: 54px !important;
-        padding: 10px 28px !important;
-        background: rgba(255, 255, 255, 0.72) !important;
+        min-height: 64px !important;
+        height: auto !important;
+        min-width: 270px !important;
+        padding: 14px 36px !important;
+        background: #F9FAFB !important;
+        background-color: #F9FAFB !important;
         border-radius: 999px !important;
-        border: 1px solid rgba(216, 180, 254, 0.45) !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
-        transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+        border: 2px solid #D8ECE3 !important;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.04) !important;
+        transition: all 0.25s ease-in-out !important;
     }
+    button[data-baseweb="tab"]:hover,
     .stTabs [data-baseweb="tab"]:hover {
-        background: rgba(255, 255, 255, 0.96) !important;
+        background: #F0FBF6 !important;
+        background-color: #F0FBF6 !important;
+        border-color: #A8DFC4 !important;
         transform: translateY(-2px) !important;
-        box-shadow: 0 6px 16px rgba(124, 58, 237, 0.15) !important;
+        box-shadow: 0 6px 14px rgba(45, 106, 79, 0.10) !important;
     }
+    button[data-baseweb="tab"][aria-selected="true"],
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #5B21B6 0%, #7C3AED 52%, #2D6A4F 100%) !important;
-        border: 1.5px solid rgba(255, 255, 255, 0.65) !important;
-        box-shadow: 0 8px 22px rgba(124, 58, 237, 0.38) !important;
+        background: #E6F7EF !important;
+        background-color: #E6F7EF !important;
+        border: 2px solid #82CFA9 !important;
+        border-radius: 999px !important;
+        box-shadow: 0 6px 18px rgba(45, 106, 79, 0.15) !important;
         transform: translateY(-1px) !important;
     }
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 1.2rem !important;
+    button[data-baseweb="tab"] [data-testid="stMarkdownContainer"] p,
+    button[data-baseweb="tab"] p {
+        font-size: 1.3rem !important;
         font-weight: 800 !important;
-        color: #4A235A !important;
+        color: #4B5563 !important;
         text-transform: uppercase !important;
-        letter-spacing: 0.7px !important;
+        letter-spacing: 0.5px !important;
         margin: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
+        line-height: 1.2 !important;
     }
-    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] [data-testid="stMarkdownContainer"] p {
-        color: #FFFFFF !important;
-        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.22) !important;
+    button[data-baseweb="tab"][aria-selected="true"] [data-testid="stMarkdownContainer"] p,
+    button[data-baseweb="tab"][aria-selected="true"] p {
+        color: #1B4332 !important;
+        text-shadow: none !important;
+    }
+    button[data-baseweb="tab"] .trebol-tab-icon {
+        font-size: 1.3em !important;
+        line-height: 1 !important;
+        vertical-align: middle !important;
+        display: inline-block !important;
+        transition: opacity 0.25s ease-in-out !important;
+        opacity: 0.5 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] .trebol-tab-icon {
+        opacity: 1 !important;
+    }
+
+    /* CAMBIO 2: Botones "+ AGREGAR NUEVA CATEGORÍA DE COSTOS" (rojo/coral suave) y "DE INGRESOS" (verde menta) */
+    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details,
+    .element-container:has(.hook-agregar-costo) + .element-container details,
+    details[data-add-cat="costo"] {
+        background-color: #FFF2EE !important;
+        border: 2px solid #E07A5F !important;
+        border-radius: 16px !important;
+        box-shadow: 0 4px 12px rgba(224, 122, 95, 0.15) !important;
+        margin-bottom: 14px !important;
+        transition: all 0.22s ease-in-out !important;
+        overflow: hidden !important;
+    }
+    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary,
+    .element-container:has(.hook-agregar-costo) + .element-container details > summary,
+    details[data-add-cat="costo"] > summary {
+        background-color: #FADBD8 !important;
+        color: #922B21 !important;
+        font-weight: 800 !important;
+        padding: 12px 18px !important;
+        border-radius: 14px !important;
+        transition: all 0.22s ease-in-out !important;
+    }
+    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary:hover,
+    .element-container:has(.hook-agregar-costo) + .element-container details > summary:hover,
+    details[data-add-cat="costo"] > summary:hover {
+        background-color: #F5B7B1 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 6px 14px rgba(192, 57, 43, 0.18) !important;
+    }
+    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary p,
+    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary span,
+    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary svg,
+    details[data-add-cat="costo"] > summary p,
+    details[data-add-cat="costo"] > summary span,
+    details[data-add-cat="costo"] > summary svg {
+        color: #922B21 !important;
+        fill: #922B21 !important;
+        font-weight: 800 !important;
+    }
+
+    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details,
+    .element-container:has(.hook-agregar-ingreso) + .element-container details,
+    details[data-add-cat="ingreso"] {
+        background-color: #ECFDF5 !important;
+        border: 2px solid #48C9B0 !important;
+        border-radius: 16px !important;
+        box-shadow: 0 4px 12px rgba(72, 201, 176, 0.15) !important;
+        margin-bottom: 14px !important;
+        transition: all 0.22s ease-in-out !important;
+        overflow: hidden !important;
+    }
+    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary,
+    .element-container:has(.hook-agregar-ingreso) + .element-container details > summary,
+    details[data-add-cat="ingreso"] > summary {
+        background-color: #D1F2EB !important;
+        color: #0E6251 !important;
+        font-weight: 800 !important;
+        padding: 12px 18px !important;
+        border-radius: 14px !important;
+        transition: all 0.22s ease-in-out !important;
+    }
+    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary:hover,
+    .element-container:has(.hook-agregar-ingreso) + .element-container details > summary:hover,
+    details[data-add-cat="ingreso"] > summary:hover {
+        background-color: #A3E4D7 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 6px 14px rgba(17, 120, 100, 0.18) !important;
+    }
+    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary p,
+    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary span,
+    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary svg,
+    details[data-add-cat="ingreso"] > summary p,
+    details[data-add-cat="ingreso"] > summary span,
+    details[data-add-cat="ingreso"] > summary svg {
+        color: #0E6251 !important;
+        fill: #0E6251 !important;
+        font-weight: 800 !important;
     }
 
     .metric-card {
@@ -2097,10 +2210,28 @@ st.text_input(
     on_change=sync_orden_ingresos_cb
 )
 
-# ----------------- PESTAÑAS EN MAYÚSCULAS (REQ 5) -----------------
+def mover_categoria_costo(idx_actual, direccion):
+    cats = datos.get("categorias_costos", [])
+    nuevo_idx = idx_actual + direccion
+    if 0 <= idx_actual < len(cats) and 0 <= nuevo_idx < len(cats):
+        cats[idx_actual], cats[nuevo_idx] = cats[nuevo_idx], cats[idx_actual]
+        datos["categorias_costos"] = cats
+        guardar_datos(datos)
+
+
+def mover_categoria_ingreso(idx_actual, direccion):
+    cats = datos.get("categorias_ingresos", [])
+    nuevo_idx = idx_actual + direccion
+    if 0 <= idx_actual < len(cats) and 0 <= nuevo_idx < len(cats):
+        cats[idx_actual], cats[nuevo_idx] = cats[nuevo_idx], cats[idx_actual]
+        datos["categorias_ingresos"] = cats
+        guardar_datos(datos)
+
+
+# ----------------- PESTAÑAS PRINCIPALES CON 🍀 (CAMBIO 1) -----------------
 pestana1, pestana2 = st.tabs([
-    "📊 COSTOS E INGRESOS",
-    "💎 CARTERA DE INVERSIONES"
+    "🍀 COSTOS E INGRESOS",
+    "🍀 CARTERA DE INVERSIONES"
 ])
 
 # =========================================================================
@@ -2216,6 +2347,7 @@ with pestana1:
     # ---------------- COSTOS ----------------
     with col_izq:
         st.markdown("<h3 style='color: #A04000; margin-bottom: 6px;'>📉 Mis Costos Mensuales</h3>", unsafe_allow_html=True)
+        st.markdown("<div class='hook-agregar-costo' style='display:none;'></div>", unsafe_allow_html=True)
 
         with st.expander("➕ AGREGAR NUEVA CATEGORÍA DE COSTOS"):
             c_nc1, c_nc2 = st.columns([2.8, 1.2])
@@ -2244,7 +2376,28 @@ with pestana1:
 
             # \u200b identifica de manera unívoca a las categorías de Costos para el Drag & Drop
             titulo_cat = f"⠿\u200b {icono_cat} **{cat_nombre}** — Subtotal: **{sub_ars:,.0f} ARS** ({sub_usd:,.1f} USD)"
-            with st.expander(titulo_cat, expanded=False):
+            col_exp_c, col_up_c, col_down_c = st.columns([0.84, 0.08, 0.08], gap="small")
+            with col_up_c:
+                st.button(
+                    "▲",
+                    key=f"btn_up_c_{cat_nombre}",
+                    disabled=(cat_idx == 0),
+                    help=f"Subir {cat_nombre}",
+                    on_click=mover_categoria_costo,
+                    args=(cat_idx, -1),
+                    use_container_width=True
+                )
+            with col_down_c:
+                st.button(
+                    "▼",
+                    key=f"btn_down_c_{cat_nombre}",
+                    disabled=(cat_idx == len(datos["categorias_costos"]) - 1),
+                    help=f"Bajar {cat_nombre}",
+                    on_click=mover_categoria_costo,
+                    args=(cat_idx, 1),
+                    use_container_width=True
+                )
+            with col_exp_c.expander(titulo_cat, expanded=False):
                 editar_cat = st.checkbox(
                     "✏️ Editar nombre o ícono de la categoría",
                     key=f"chk_edit_c_{cat_nombre}"
@@ -2368,6 +2521,7 @@ with pestana1:
     # ---------------- INGRESOS ----------------
     with col_der:
         st.markdown("<h3 style='color: #117864; margin-bottom: 6px;'>📈 Mis Ingresos Mensuales</h3>", unsafe_allow_html=True)
+        st.markdown("<div class='hook-agregar-ingreso' style='display:none;'></div>", unsafe_allow_html=True)
 
         with st.expander("➕ AGREGAR NUEVA CATEGORÍA DE INGRESOS"):
             c_ni1, c_ni2 = st.columns([2.8, 1.2])
@@ -2396,7 +2550,28 @@ with pestana1:
 
             # \u200c identifica de manera unívoca a las categorías de Ingresos para el Drag & Drop
             titulo_cat_i = f"⠿\u200c {icono_cat_i} **{cat_nombre_i}** — Subtotal: **{sub_ars_i:,.0f} ARS** ({sub_usd_i:,.1f} USD)"
-            with st.expander(titulo_cat_i, expanded=False):
+            col_exp_i, col_up_i, col_down_i = st.columns([0.84, 0.08, 0.08], gap="small")
+            with col_up_i:
+                st.button(
+                    "▲",
+                    key=f"btn_up_i_{cat_nombre_i}",
+                    disabled=(cat_idx_i == 0),
+                    help=f"Subir {cat_nombre_i}",
+                    on_click=mover_categoria_ingreso,
+                    args=(cat_idx_i, -1),
+                    use_container_width=True
+                )
+            with col_down_i:
+                st.button(
+                    "▼",
+                    key=f"btn_down_i_{cat_nombre_i}",
+                    disabled=(cat_idx_i == len(datos["categorias_ingresos"]) - 1),
+                    help=f"Bajar {cat_nombre_i}",
+                    on_click=mover_categoria_ingreso,
+                    args=(cat_idx_i, 1),
+                    use_container_width=True
+                )
+            with col_exp_i.expander(titulo_cat_i, expanded=False):
                 editar_cat_i = st.checkbox(
                     "✏️ Editar nombre o ícono de la categoría",
                     key=f"chk_edit_i_{cat_nombre_i}"
