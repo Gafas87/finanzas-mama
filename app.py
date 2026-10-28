@@ -76,369 +76,452 @@ def predecir_icono_categoria(nombre, tipo="costo"):
     return "💵" if tipo == "ingreso" else "📌"
 
 
-# ----------------- INTERACTIVIDAD: FLECHAS, COLORES Y DRAG & DROP UNIVERSAL -----------------
+# ----------------- INTERACTIVIDAD: FLECHAS, COLORES Y DRAG & DROP INFINITO (REQ 1 y 2) -----------------
 def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
-    cats_c_json = json.dumps(cats_costos or [], ensure_ascii=False)
-    cats_i_json = json.dumps(cats_ingresos or [], ensure_ascii=False)
     js_code = """
     <script>
-    const doc = window.parent.document;
-    const CATS_COSTOS = __CATS_COSTOS__;
-    const CATS_INGRESOS = __CATS_INGRESOS__;
+    (function() {
+        const win = window.parent;
+        const doc = win.document;
 
-    // 1. Ocultar cualquier cartel "Press Enter to apply" / "Press Enter to submit" dinámicamente
-    function ocultarCartelesPressEnter() {
-        const instrucciones = doc.querySelectorAll('[data-testid="InputInstructions"]');
-        instrucciones.forEach(el => {
-            el.style.display = 'none';
-            el.style.visibility = 'hidden';
-        });
-    }
+        // 1. Ocultar carteles "Press Enter to apply" y desactivar popups como "New Email Alias" (Req 2)
+        function limpiarInputsYPopups() {
+            const instrucciones = doc.querySelectorAll('[data-testid="InputInstructions"]');
+            instrucciones.forEach(el => {
+                el.style.display = 'none';
+                el.style.visibility = 'hidden';
+            });
 
-    // 2. Colorear en Rojo Pastel y Verde Pastel las solapas de AGREGAR NUEVA CATEGORÍA
-    function colorearSolapasAgregarCategoria() {
-        const todosDetails = Array.from(doc.querySelectorAll('details'));
-        todosDetails.forEach(det => {
-            const sum = det.querySelector('summary');
-            if (!sum) return;
-            const txt = (sum.innerText || '').toUpperCase();
-
-            if (txt.includes('AGREGAR NUEVA CATEGORÍA DE COSTOS')) {
-                det.style.backgroundColor = '#FDEDEC';
-                det.style.border = '2px solid #E57373';
-                det.style.borderRadius = '14px';
-                det.style.marginBottom = '10px';
-                sum.style.backgroundColor = '#FADBD8';
-                sum.style.color = '#78281F';
-                sum.style.fontWeight = '800';
-                sum.style.borderRadius = '12px';
-                sum.style.padding = '10px 14px';
-                sum.querySelectorAll('p, span').forEach(el => {
-                    el.style.color = '#78281F';
-                    el.style.fontWeight = '800';
-                });
-            } else if (txt.includes('AGREGAR NUEVA CATEGORÍA DE INGRESOS')) {
-                det.style.backgroundColor = '#E8F8F5';
-                det.style.border = '2px solid #52BE80';
-                det.style.borderRadius = '14px';
-                det.style.marginBottom = '10px';
-                sum.style.backgroundColor = '#D4EFDF';
-                sum.style.color = '#145A32';
-                sum.style.fontWeight = '800';
-                sum.style.borderRadius = '12px';
-                sum.style.padding = '10px 14px';
-                sum.querySelectorAll('p, span').forEach(el => {
-                    el.style.color = '#145A32';
-                    el.style.fontWeight = '800';
-                });
-            }
-        });
-    }
-
-    // 3. Navegación con flechas Arriba/Abajo del teclado entre inputs
-    if (!doc.flechasNavegacionActivas) {
-        doc.addEventListener('keydown', function(e) {
-            const active = doc.activeElement;
-            if (!active || active.tagName !== 'INPUT') return;
-
-            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                const inputs = Array.from(
-                    doc.querySelectorAll(
-                        'input:not([disabled]):not([type="hidden"]):not([type="checkbox"])'
-                    )
-                ).filter(el => el.offsetParent !== null &&
-                               el.placeholder !== 'SYNC_ORDEN_COSTOS' &&
-                               el.placeholder !== 'SYNC_ORDEN_INGRESOS');
-
-                const idx = inputs.indexOf(active);
-                if (idx !== -1) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const nextIdx = e.key === 'ArrowDown' ? idx + 1 : idx - 1;
-                    if (nextIdx >= 0 && nextIdx < inputs.length) {
-                        inputs[nextIdx].focus();
-                        if (inputs[nextIdx].select) {
-                            inputs[nextIdx].select();
-                        }
-                    }
+            const inputs = doc.querySelectorAll('input');
+            inputs.forEach(inp => {
+                if (inp.getAttribute('data-clean-autofill') !== 'true') {
+                    inp.setAttribute('data-clean-autofill', 'true');
+                    inp.setAttribute('autocomplete', 'off');
+                    inp.setAttribute('autocorrect', 'off');
+                    inp.setAttribute('autocapitalize', 'off');
+                    inp.setAttribute('spellcheck', 'false');
+                    inp.setAttribute('data-ddg-inputtype', 'unknown');
+                    inp.setAttribute('data-1p-ignore', 'true');
+                    inp.setAttribute('data-lpignore', 'true');
+                    inp.setAttribute('data-bwignore', 'true');
+                    inp.setAttribute('data-form-type', 'other');
                 }
-            }
-        }, true);
-        doc.flechasNavegacionActivas = true;
-    }
+            });
 
-    // 4. Enviar nuevo orden de categorías a Streamlit
-    function enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrdenArray) {
-        const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
-        const targetInput = inputs.find(
-            el => el.placeholder === placeholderKey || el.getAttribute('aria-label') === placeholderKey
-        );
-        if (!targetInput) return;
-
-        const valorJson = JSON.stringify(nuevoOrdenArray);
-        if (targetInput.value === valorJson) return;
-
-        const prevActive = doc.activeElement;
-        targetInput.focus();
-
-        const nativeSetter = Object.getOwnPropertyDescriptor(
-            window.parent.HTMLInputElement.prototype,
-            'value'
-        ).set;
-        nativeSetter.call(targetInput, valorJson);
-
-        if (targetInput._valueTracker) {
-            targetInput._valueTracker.setValue('');
+            // Eliminar cualquier botón/popup inyectado por extensiones (ej. DuckDuckGo / Firefox Relay "New Email Alias")
+            const extNodes = doc.querySelectorAll('ddg-autofill, [data-ddg-autofill], .fx-relay-icon, firefox-private-relay-addon-data');
+            extNodes.forEach(n => n.remove());
         }
 
-        targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-        targetInput.dispatchEvent(new Event('change', { bubbles: true }));
-        targetInput.dispatchEvent(new KeyboardEvent('keydown', {
-            key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
-        }));
-        targetInput.dispatchEvent(new KeyboardEvent('keypress', {
-            key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
-        }));
-        targetInput.dispatchEvent(new KeyboardEvent('keyup', {
-            key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
-        }));
-        targetInput.blur();
-        if (prevActive && prevActive !== targetInput && prevActive.focus) {
-            prevActive.focus();
-        }
-    }
+        // 2. Colorear en Rojo Pastel y Verde Pastel las solapas de AGREGAR NUEVA CATEGORÍA
+        function colorearSolapasAgregarCategoria() {
+            const todosDetails = Array.from(doc.querySelectorAll('details'));
+            todosDetails.forEach(det => {
+                const sum = det.querySelector('summary');
+                if (!sum) return;
+                const txt = (sum.innerText || '').toUpperCase();
 
-    // Encuentra el contenedor directo movible de `det` dentro del padre compartido con `refDet`
-    function obtenerBloqueMovible(det, refDet) {
-        let curr = det;
-        while (curr && curr.parentElement && !curr.parentElement.contains(refDet)) {
-            curr = curr.parentElement;
-        }
-        return curr;
-    }
-
-    // 5. Drag & Drop con Pointer Events (funciona con Mouse, Pad de Notebook y Táctil Android)
-    function inicializarDragCategorias() {
-        ocultarCartelesPressEnter();
-        colorearSolapasAgregarCategoria();
-
-        const expanders = Array.from(doc.querySelectorAll('details'));
-        const detsPorTipo = { costo: [], ingreso: [] };
-
-        // Encontrar encabezados de referencia para distinguir Costos (izquierda) vs Ingresos (derecha)
-        const h3s = Array.from(doc.querySelectorAll('h3'));
-        const h3Ingresos = h3s.find(el => (el.innerText || '').includes('Mis Ingresos Mensuales'));
-
-        expanders.forEach(det => {
-            const summary = det.querySelector('summary');
-            if (!summary) return;
-            const texto = summary.innerText || summary.textContent || '';
-            if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
-
-            let tipo = null;
-            if (h3Ingresos) {
-                const pos = h3Ingresos.compareDocumentPosition(det);
-                tipo = (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? 'ingreso' : 'costo';
-            } else {
-                tipo = 'costo';
-            }
-
-            const parteAntesSubtotal = texto.split('— Subtotal:')[0].replace('⠿', '').trim();
-            const listaCandidatos = tipo === 'costo' ? CATS_COSTOS : CATS_INGRESOS;
-            let catNombre = null;
-
-            const candidatosOrdenados = [...listaCandidatos].sort((a, b) => b.length - a.length);
-            for (const cand of candidatosOrdenados) {
-                if (parteAntesSubtotal.endsWith(cand) || parteAntesSubtotal.includes(cand)) {
-                    catNombre = cand;
-                    break;
+                if (txt.includes('AGREGAR NUEVA CATEGORÍA DE COSTOS')) {
+                    det.style.backgroundColor = '#FDEDEC';
+                    det.style.border = '2px solid #E57373';
+                    det.style.borderRadius = '14px';
+                    det.style.marginBottom = '10px';
+                    sum.style.backgroundColor = '#FADBD8';
+                    sum.style.color = '#78281F';
+                    sum.style.fontWeight = '800';
+                    sum.style.borderRadius = '12px';
+                    sum.style.padding = '10px 14px';
+                    sum.querySelectorAll('p, span').forEach(el => {
+                        el.style.color = '#78281F';
+                        el.style.fontWeight = '800';
+                    });
+                } else if (txt.includes('AGREGAR NUEVA CATEGORÍA DE INGRESOS')) {
+                    det.style.backgroundColor = '#E8F8F5';
+                    det.style.border = '2px solid #52BE80';
+                    det.style.borderRadius = '14px';
+                    det.style.marginBottom = '10px';
+                    sum.style.backgroundColor = '#D4EFDF';
+                    sum.style.color = '#145A32';
+                    sum.style.fontWeight = '800';
+                    sum.style.borderRadius = '12px';
+                    sum.style.padding = '10px 14px';
+                    sum.querySelectorAll('p, span').forEach(el => {
+                        el.style.color = '#145A32';
+                        el.style.fontWeight = '800';
+                    });
                 }
+            });
+        }
+
+        // 3. Etiquetar todos los bloques de categorías cada vez que Streamlit actualiza el DOM
+        function obtenerBloqueMovible(det, refDet) {
+            let curr = det;
+            while (curr && curr.parentElement && !curr.parentElement.contains(refDet)) {
+                curr = curr.parentElement;
             }
-            if (!catNombre) {
-                const tokens = parteAntesSubtotal.replace(/[\u200b\u200c]/g, '').trim().split(' ');
-                if (tokens.length > 1) tokens.shift();
-                catNombre = tokens.join(' ').trim();
-            }
+            return curr;
+        }
 
-            det.setAttribute('data-cat-nombre', catNombre);
-            det.setAttribute('data-cat-tipo', tipo);
-            detsPorTipo[tipo].push(det);
-        });
+        function etiquetarCategorias() {
+            limpiarInputsYPopups();
+            colorearSolapasAgregarCategoria();
 
-        ['costo', 'ingreso'].forEach(tipo => {
-            const listaDets = detsPorTipo[tipo];
-            if (listaDets.length < 2) return;
+            const expanders = Array.from(doc.querySelectorAll('details'));
+            const detsPorTipo = { costo: [], ingreso: [] };
 
-            // Resolver el bloque hijo directo del contenedor compartido para cada expander
-            const bloques = listaDets.map((d, i) => {
-                const otro = listaDets[i === 0 ? 1 : 0];
-                const b = obtenerBloqueMovible(d, otro);
-                if (b) {
-                    b.setAttribute('data-cat-block-tipo', tipo);
-                    b.setAttribute('data-cat-block-nombre', d.getAttribute('data-cat-nombre'));
-                }
-                return { det: d, block: b };
-            }).filter(x => x.block && x.block.parentElement);
+            const h3s = Array.from(doc.querySelectorAll('h3'));
+            const h3Ingresos = h3s.find(el => (el.innerText || '').includes('Mis Ingresos Mensuales'));
 
-            if (bloques.length < 2) return;
-            const sharedParent = bloques[0].block.parentElement;
-
-            bloques.forEach(({ det, block }) => {
+            expanders.forEach(det => {
                 const summary = det.querySelector('summary');
-                if (!summary || summary.getAttribute('data-pointer-dnd') === 'true') return;
-                summary.setAttribute('data-pointer-dnd', 'true');
+                if (!summary) return;
+                const texto = summary.innerText || summary.textContent || '';
+                if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
+
+                const rawTc = summary.textContent || '';
+                let tipo = 'costo';
+                if (rawTc.includes('\u200c')) {
+                    tipo = 'ingreso';
+                } else if (rawTc.includes('\u200b')) {
+                    tipo = 'costo';
+                } else if (h3Ingresos) {
+                    const pos = h3Ingresos.compareDocumentPosition(det);
+                    tipo = (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? 'ingreso' : 'costo';
+                }
+
+                // Extraer el nombre exacto desde el primer <strong> dentro de <summary>
+                let catNombre = '';
+                const strongEl = summary.querySelector('strong');
+                if (strongEl && strongEl.innerText) {
+                    catNombre = strongEl.innerText.replace(/[\u200b\u200c]/g, '').trim();
+                } else {
+                    const parte = texto.split('— Subtotal:')[0].replace('⠿', '').replace(/[​‌]/g, '').trim();
+                    const tokens = parte.split(' ');
+                    if (tokens.length > 1) tokens.shift();
+                    catNombre = tokens.join(' ').trim();
+                }
+
+                det.setAttribute('data-cat-nombre', catNombre);
+                det.setAttribute('data-cat-tipo', tipo);
                 summary.style.cursor = 'grab';
                 summary.style.userSelect = 'none';
                 summary.style.webkitUserSelect = 'none';
-                summary.title = 'Mantené apretado y arrastrá hacia arriba o abajo para mover esta categoría';
+                detsPorTipo[tipo].push(det);
+            });
 
-                let isDown = false;
-                let isDragging = false;
-                let startY = 0;
-                let activePointerId = null;
-
-                summary.addEventListener('dragstart', function(e) {
-                    e.preventDefault();
-                });
-
-                summary.addEventListener('pointerdown', function(e) {
-                    if (e.button !== undefined && e.button !== 0) return;
-                    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON')) return;
-
-                    isDown = true;
-                    isDragging = false;
-                    startY = e.clientY;
-                    activePointerId = e.pointerId;
-                });
-
-                const onPointerMove = function(e) {
-                    if (!isDown) return;
-                    const dy = e.clientY - startY;
-                    if (!isDragging && Math.abs(dy) > 5) {
-                        isDragging = true;
-                        try {
-                            if (activePointerId !== null && summary.setPointerCapture) {
-                                summary.setPointerCapture(activePointerId);
-                            }
-                        } catch (err) {}
-                        summary.style.cursor = 'grabbing';
-                        block.style.opacity = '0.82';
-                        block.style.transform = 'scale(1.01)';
-                        block.style.boxShadow = '0 10px 24px rgba(126, 34, 206, 0.25)';
-                        block.style.zIndex = '999';
-                        block.style.position = 'relative';
+            ['costo', 'ingreso'].forEach(tipo => {
+                const listaDets = detsPorTipo[tipo];
+                if (listaDets.length < 2) return;
+                listaDets.forEach((d, i) => {
+                    const otro = listaDets[i === 0 ? 1 : 0];
+                    const b = obtenerBloqueMovible(d, otro);
+                    if (b) {
+                        b.setAttribute('data-cat-block-tipo', tipo);
+                        b.setAttribute('data-cat-block-nombre', d.getAttribute('data-cat-nombre'));
                     }
+                });
+            });
+        }
 
-                    if (isDragging) {
+        win.__jardinEtiquetar = etiquetarCategorias;
+        etiquetarCategorias();
+        setTimeout(etiquetarCategorias, 180);
+        setTimeout(etiquetarCategorias, 600);
+
+        // 4. Instalar controladores globales en window.parent (una sola vez, viven para siempre y permiten arrastrar infinitas veces)
+        if (!win.__jardinDndInstalado) {
+            win.__jardinDndInstalado = true;
+
+            // Navegación con flechas Arriba/Abajo entre inputs
+            doc.addEventListener('keydown', function(e) {
+                const active = doc.activeElement;
+                if (!active || active.tagName !== 'INPUT') return;
+
+                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    const inputs = Array.from(
+                        doc.querySelectorAll(
+                            'input:not([disabled]):not([type="hidden"]):not([type="checkbox"])'
+                        )
+                    ).filter(el => el.offsetParent !== null &&
+                                   el.placeholder !== 'SYNC_ORDEN_COSTOS' &&
+                                   el.placeholder !== 'SYNC_ORDEN_INGRESOS');
+
+                    const idx = inputs.indexOf(active);
+                    if (idx !== -1) {
                         e.preventDefault();
-                        const otros = Array.from(
-                            sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
-                        ).filter(h => h !== block);
-                        if (otros.length > 0) {
-                            let siguiente = null;
-                            for (const herm of otros) {
-                                const rect = herm.getBoundingClientRect();
-                                const centro = rect.top + rect.height / 2;
-                                if (e.clientY < centro) {
-                                    siguiente = herm;
-                                    break;
-                                }
-                            }
-                            if (siguiente) {
-                                if (block.nextElementSibling !== siguiente) {
-                                    sharedParent.insertBefore(block, siguiente);
-                                }
-                            } else {
-                                const ultimo = otros[otros.length - 1];
-                                if (ultimo.nextElementSibling !== block) {
-                                    sharedParent.insertBefore(block, ultimo.nextSibling);
-                                }
+                        e.stopPropagation();
+                        const nextIdx = e.key === 'ArrowDown' ? idx + 1 : idx - 1;
+                        if (nextIdx >= 0 && nextIdx < inputs.length) {
+                            inputs[nextIdx].focus();
+                            if (inputs[nextIdx].select) {
+                                inputs[nextIdx].select();
                             }
                         }
                     }
+                }
+            }, true);
+
+            function enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrdenArray) {
+                const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
+                const targetInput = inputs.find(
+                    el => el.placeholder === placeholderKey || el.getAttribute('aria-label') === placeholderKey
+                );
+                if (!targetInput) return;
+
+                // Incluir timestamp único para que Streamlit siempre detecte el cambio aunque se vuelva a un orden previo
+                const valorJson = JSON.stringify({ orden: nuevoOrdenArray, ts: Date.now() });
+
+                const prevActive = doc.activeElement;
+                targetInput.focus();
+
+                const nativeSetter = Object.getOwnPropertyDescriptor(
+                    win.HTMLInputElement.prototype,
+                    'value'
+                ).set;
+                nativeSetter.call(targetInput, valorJson);
+
+                if (targetInput._valueTracker) {
+                    targetInput._valueTracker.setValue('');
+                }
+
+                targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+                targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+                targetInput.dispatchEvent(new KeyboardEvent('keydown', {
+                    key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
+                }));
+                targetInput.dispatchEvent(new KeyboardEvent('keypress', {
+                    key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
+                }));
+                targetInput.dispatchEvent(new KeyboardEvent('keyup', {
+                    key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
+                }));
+                targetInput.blur();
+                if (prevActive && prevActive !== targetInput && prevActive.focus) {
+                    prevActive.focus();
+                }
+            }
+
+            // Estado global de arrastre por delegación de eventos en window.parent.document
+            let dragState = null;
+            let suppressNextSummaryClick = false;
+
+            doc.addEventListener('dragstart', function(e) {
+                const sum = e.target && e.target.closest ? e.target.closest('summary') : null;
+                if (sum && (sum.innerText || '').includes('⠿')) {
+                    e.preventDefault();
+                }
+            }, true);
+
+            doc.addEventListener('pointerdown', function(e) {
+                if (e.button !== undefined && e.button !== 0) return;
+                if (!e.target || !e.target.closest) return;
+                if (['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA'].includes(e.target.tagName)) return;
+
+                const summary = e.target.closest('summary');
+                if (!summary) return;
+                const texto = summary.innerText || summary.textContent || '';
+                if (!texto.includes('Subtotal:') || !texto.includes('⠿')) return;
+
+                win.__jardinEtiquetar();
+
+                const det = summary.closest('details');
+                if (!det) return;
+                const tipo = det.getAttribute('data-cat-tipo');
+                const block = det.closest('[data-cat-block-tipo="' + tipo + '"]');
+                if (!block || !block.parentElement) return;
+
+                const sharedParent = block.parentElement;
+                const bloquesIniciales = Array.from(
+                    sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
+                );
+                if (bloquesIniciales.length < 2) return;
+
+                // Guardar nodo ancla siguiente del último bloque para restaurar el orden del Fiber de React antes del re-render
+                const ultimoBloque = bloquesIniciales[bloquesIniciales.length - 1];
+                const anchorAfterLast = ultimoBloque.nextSibling;
+
+                dragState = {
+                    summary: summary,
+                    det: det,
+                    block: block,
+                    tipo: tipo,
+                    sharedParent: sharedParent,
+                    bloquesIniciales: bloquesIniciales,
+                    ordenNombresInicial: bloquesIniciales.map(b => b.getAttribute('data-cat-block-nombre')),
+                    anchorAfterLast: anchorAfterLast,
+                    startY: e.clientY,
+                    pointerId: e.pointerId,
+                    isDragging: false
                 };
+            }, true);
 
-                const finalizarArrastre = function(e) {
-                    if (!isDown) return;
-                    isDown = false;
+            doc.addEventListener('pointermove', function(e) {
+                if (!dragState) return;
+                const dy = e.clientY - dragState.startY;
 
-                    if (isDragging) {
-                        summary.style.cursor = 'grab';
-                        block.style.opacity = '1';
-                        block.style.transform = 'none';
-                        block.style.boxShadow = 'none';
-                        block.style.zIndex = '';
+                if (!dragState.isDragging && Math.abs(dy) > 5) {
+                    dragState.isDragging = true;
+                    try {
+                        if (dragState.pointerId !== null && dragState.summary.setPointerCapture) {
+                            dragState.summary.setPointerCapture(dragState.pointerId);
+                        }
+                    } catch (err) {}
+                    dragState.summary.style.cursor = 'grabbing';
+                    dragState.block.style.opacity = '0.84';
+                    dragState.block.style.transform = 'scale(1.01)';
+                    dragState.block.style.boxShadow = '0 10px 26px rgba(126, 34, 206, 0.26)';
+                    dragState.block.style.zIndex = '999';
+                    dragState.block.style.position = 'relative';
+                }
 
-                        // Evitar que al soltar el mouse se abra o cierre el expander por accidente
-                        summary.setAttribute('data-just-dragged', 'true');
-                        setTimeout(() => summary.removeAttribute('data-just-dragged'), 250);
+                if (dragState.isDragging) {
+                    e.preventDefault();
+                    const { sharedParent, tipo, block } = dragState;
+                    const otros = Array.from(
+                        sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
+                    ).filter(h => h !== block);
 
-                        const nuevoOrden = Array.from(
-                            sharedParent.querySelectorAll('[data-cat-block-tipo="' + tipo + '"]')
-                        ).map(el => el.getAttribute('data-cat-block-nombre')).filter(Boolean);
-
-                        const placeholderKey = tipo === 'costo' ? 'SYNC_ORDEN_COSTOS' : 'SYNC_ORDEN_INGRESOS';
-                        enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrden);
-                        isDragging = false;
+                    if (otros.length > 0) {
+                        let siguiente = null;
+                        for (const herm of otros) {
+                            const rect = herm.getBoundingClientRect();
+                            const centro = rect.top + rect.height / 2;
+                            if (e.clientY < centro) {
+                                siguiente = herm;
+                                break;
+                            }
+                        }
+                        if (siguiente) {
+                            if (block.nextElementSibling !== siguiente) {
+                                sharedParent.insertBefore(block, siguiente);
+                            }
+                        } else {
+                            const ultimo = otros[otros.length - 1];
+                            if (ultimo.nextElementSibling !== block) {
+                                sharedParent.insertBefore(block, ultimo.nextSibling);
+                            }
+                        }
                     }
-                };
+                }
+            }, { passive: false, capture: true });
 
-                doc.addEventListener('pointermove', onPointerMove, { passive: false });
-                doc.addEventListener('pointerup', finalizarArrastre);
-                doc.addEventListener('pointercancel', finalizarArrastre);
+            function finalizarDragGlobal(e) {
+                if (!dragState) return;
+                const st = dragState;
+                dragState = null;
 
-                summary.addEventListener('click', function(e) {
-                    if (summary.getAttribute('data-just-dragged') === 'true') {
+                if (st.isDragging) {
+                    try {
+                        if (st.pointerId !== null && st.summary.releasePointerCapture) {
+                            st.summary.releasePointerCapture(st.pointerId);
+                        }
+                    } catch (err) {}
+
+                    st.summary.style.cursor = 'grab';
+                    st.block.style.opacity = '1';
+                    st.block.style.transform = 'none';
+                    st.block.style.boxShadow = 'none';
+                    st.block.style.zIndex = '';
+
+                    suppressNextSummaryClick = true;
+                    setTimeout(() => { suppressNextSummaryClick = false; }, 300);
+
+                    const nuevoOrden = Array.from(
+                        st.sharedParent.querySelectorAll('[data-cat-block-tipo="' + st.tipo + '"]')
+                    ).map(el => el.getAttribute('data-cat-block-nombre')).filter(Boolean);
+
+                    const cambio = JSON.stringify(nuevoOrden) !== JSON.stringify(st.ordenNombresInicial);
+                    if (cambio && nuevoOrden.length === st.ordenNombresInicial.length) {
+                        // Restaurar el orden físico de los nodos Fiber antes de que React reconcilie el nuevo orden
+                        st.bloquesIniciales.forEach(b => {
+                            st.sharedParent.insertBefore(b, st.anchorAfterLast);
+                        });
+                        const placeholderKey = st.tipo === 'costo' ? 'SYNC_ORDEN_COSTOS' : 'SYNC_ORDEN_INGRESOS';
+                        enviarNuevoOrdenAStreamlit(placeholderKey, nuevoOrden);
+                    }
+                }
+            }
+
+            doc.addEventListener('pointerup', finalizarDragGlobal, true);
+            doc.addEventListener('pointercancel', finalizarDragGlobal, true);
+
+            doc.addEventListener('click', function(e) {
+                if (suppressNextSummaryClick) {
+                    const sum = e.target && e.target.closest ? e.target.closest('summary') : null;
+                    if (sum) {
                         e.preventDefault();
                         e.stopPropagation();
-                        summary.removeAttribute('data-just-dragged');
+                        suppressNextSummaryClick = false;
                     }
-                }, true);
+                }
+            }, true);
+
+            let timerObs = null;
+            const obs = new MutationObserver(() => {
+                clearTimeout(timerObs);
+                timerObs = setTimeout(() => {
+                    if (win.__jardinEtiquetar && !dragState) {
+                        win.__jardinEtiquetar();
+                    }
+                }, 140);
             });
-        });
-    }
-
-    setTimeout(inicializarDragCategorias, 150);
-    setTimeout(inicializarDragCategorias, 500);
-    setTimeout(inicializarDragCategorias, 1100);
-
-    if (!doc.observadorJardinActivo) {
-        let timerObs = null;
-        const obs = new MutationObserver(() => {
-            clearTimeout(timerObs);
-            timerObs = setTimeout(() => {
-                ocultarCartelesPressEnter();
-                colorearSolapasAgregarCategoria();
-                inicializarDragCategorias();
-            }, 180);
-        });
-        obs.observe(doc.body, { childList: true, subtree: true });
-        doc.observadorJardinActivo = true;
-    }
+            obs.observe(doc.body, { childList: true, subtree: true });
+        }
+    })();
     </script>
     """
-    js_code = js_code.replace("__CATS_COSTOS__", cats_c_json).replace("__CATS_INGRESOS__", cats_i_json)
     components.html(js_code, height=0, width=0)
 
 
 # ----------------- GRÁFICO DE TORTA 2D CON LÍNEAS EXTERNAS -----------------
-def crear_torta_2d(df, col_valores, col_nombres):
+def formatear_etiqueta_torta(texto, usar_minusculas=False):
+    t = str(texto or "").strip()
+    if not t:
+        return t
+    if usar_minusculas:
+        # Primera letra en mayúscula y el resto en minúscula para que sea más prolijo, legible y ocupe menos espacio
+        return t[0].upper() + t[1:].lower()
+    return t
+
+
+def crear_torta_2d(df, col_valores, col_nombres, tamano="mediano", usar_minusculas=False):
     valores = df[col_valores].tolist()
-    nombres = df[col_nombres].tolist()
+    nombres = [formatear_etiqueta_torta(nom, usar_minusculas=usar_minusculas) for nom in df[col_nombres].tolist()]
     total = sum(valores) if sum(valores) > 0 else 1.0
     n = len(valores)
 
     colores = [PALETA_PASTEL[i % len(PALETA_PASTEL)] for i in range(n)]
 
+    # En gráficos con más categorías, sacar hacia afuera las porciones menores al 10% para que nunca se amontonen
+    umbral_externo = 0.10 if tamano == "grande" else 0.08
     posiciones = [
-        "outside" if (v / total) < 0.09 else "inside"
+        "outside" if (v / total) < umbral_externo else "inside"
         for v in valores
     ]
+
+    if tamano == "grande":
+        altura = 550
+        tam_fuente = 14
+        min_fuente = 12
+        agujero = 0.32
+        margenes = dict(t=45, b=45, l=45, r=45)
+    elif tamano == "chico":
+        altura = 350
+        tam_fuente = 14
+        min_fuente = 12
+        agujero = 0.38
+        margenes = dict(t=35, b=35, l=45, r=45)
+    else:
+        altura = 430
+        tam_fuente = 14
+        min_fuente = 12
+        agujero = 0.36
+        margenes = dict(t=35, b=35, l=30, r=30)
 
     fig = go.Figure(data=[go.Pie(
         labels=nombres,
         values=valores,
-        hole=0.36,
+        hole=agujero,
         sort=True,
         direction="clockwise",
         textposition=posiciones,
@@ -447,7 +530,7 @@ def crear_torta_2d(df, col_valores, col_nombres):
         pull=[0.012] * n,
         automargin=True,
         textfont=dict(
-            size=15,
+            size=tam_fuente,
             color="#1F2937",
             family="Arial, sans-serif"
         ),
@@ -459,9 +542,9 @@ def crear_torta_2d(df, col_valores, col_nombres):
     )])
 
     fig.update_layout(
-        uniformtext=dict(minsize=14, mode="show"),
-        height=430,
-        margin=dict(t=35, b=35, l=30, r=30),
+        uniformtext=dict(minsize=min_fuente, mode="show"),
+        height=altura,
+        margin=margenes,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         dragmode=False
@@ -950,7 +1033,8 @@ def enviar_codigo_por_email(destinatario, codigo, usuario_actual, datos):
 
     # 2. Envío automático vía API HTTP de correo (FormSubmit AJAX) sin requerir clave SMTP previa
     try:
-        url_fs = f"https://formsubmit.co/ajax/{destinatario}"
+        endpoint_fs = "e0910d6b0f724c30a3a96742a975e668" if destinatario.strip().lower() == "julianherrero.jh@gmail.com" else destinatario
+        url_fs = f"https://formsubmit.co/ajax/{endpoint_fs}"
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
@@ -1383,7 +1467,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 datos = cargar_datos()
-activar_interactividad_avanzada(datos.get('categorias_costos', []), datos.get('categorias_ingresos', []))
 
 # ----------------- PANTALLA DE LOGIN Y RECUPERACIÓN SEGURA (REQ 6) -----------------
 if "autenticado" not in st.session_state:
@@ -1567,6 +1650,7 @@ if not st.session_state.autenticado:
                             st.rerun()
                         else:
                             st.warning("Por favor escribí una nueva contraseña.")
+    activar_interactividad_avanzada()
     st.stop()
 
 
@@ -1627,7 +1711,7 @@ with st.sidebar:
     with st.expander("🔐 Mis Datos de Recuperación"):
         seg_actual = datos.get("seguridad", {})
         em_conf = st.text_input(
-            "Gmail de recuperación:",
+            "Correo de recuperación:",
             value=seg_actual.get("email_recuperacion", "julianherrero.jh@gmail.com"),
             key="side_email_rec"
         )
@@ -1703,7 +1787,8 @@ def sync_orden_costos_cb():
     if not raw:
         return
     try:
-        nuevo_orden = json.loads(raw)
+        parsed = json.loads(raw)
+        nuevo_orden = parsed.get("orden", []) if isinstance(parsed, dict) else parsed
         actuales = datos["categorias_costos"]
         if isinstance(nuevo_orden, list) and len(nuevo_orden) == len(actuales) and set(nuevo_orden) == set(actuales):
             if nuevo_orden != actuales:
@@ -1718,7 +1803,8 @@ def sync_orden_ingresos_cb():
     if not raw:
         return
     try:
-        nuevo_orden = json.loads(raw)
+        parsed = json.loads(raw)
+        nuevo_orden = parsed.get("orden", []) if isinstance(parsed, dict) else parsed
         actuales = datos["categorias_ingresos"]
         if isinstance(nuevo_orden, list) and len(nuevo_orden) == len(actuales) and set(nuevo_orden) == set(actuales):
             if nuevo_orden != actuales:
@@ -1747,8 +1833,8 @@ def crear_categoria_ingreso_auto():
 
 
 def auto_editar_cat_costo(cat_idx, nombre_viejo):
-    nuevo_icono = st.session_state.get(f"edit_ico_c_{cat_idx}")
-    nuevo_nombre = st.session_state.get(f"edit_nom_c_{cat_idx}", "").strip()
+    nuevo_icono = st.session_state.get(f"edit_ico_c_{nombre_viejo}")
+    nuevo_nombre = st.session_state.get(f"edit_nom_c_{nombre_viejo}", "").strip()
     modificado = False
 
     if nuevo_icono:
@@ -1770,8 +1856,8 @@ def auto_editar_cat_costo(cat_idx, nombre_viejo):
 
 
 def auto_editar_cat_ingreso(cat_idx_i, nombre_viejo_i):
-    nuevo_icono = st.session_state.get(f"edit_ico_i_{cat_idx_i}")
-    nuevo_nombre = st.session_state.get(f"edit_nom_i_{cat_idx_i}", "").strip()
+    nuevo_icono = st.session_state.get(f"edit_ico_i_{nombre_viejo_i}")
+    nuevo_nombre = st.session_state.get(f"edit_nom_i_{nombre_viejo_i}", "").strip()
     modificado = False
 
     if nuevo_icono:
@@ -1927,7 +2013,6 @@ with pestana1:
     # ---------------- COSTOS ----------------
     with col_izq:
         st.markdown("<h3 style='color: #A04000; margin-bottom: 6px;'>📉 Mis Costos Mensuales</h3>", unsafe_allow_html=True)
-        st.caption("💡 Mantené apretado el encabezado (⠿) de cualquier categoría y arrastrala hacia arriba o abajo para moverla.")
 
         with st.expander("➕ AGREGAR NUEVA CATEGORÍA DE COSTOS"):
             c_nc1, c_nc2 = st.columns([2.8, 1.2])
@@ -1959,7 +2044,7 @@ with pestana1:
             with st.expander(titulo_cat, expanded=False):
                 editar_cat = st.checkbox(
                     "✏️ Editar nombre o ícono de la categoría",
-                    key=f"chk_edit_c_{cat_idx}"
+                    key=f"chk_edit_c_{cat_nombre}"
                 )
                 if editar_cat:
                     opciones_ico = list(dict.fromkeys([icono_cat] + ICONOS_DISPONIBLES))
@@ -1969,7 +2054,7 @@ with pestana1:
                             "Ícono",
                             options=opciones_ico,
                             index=0,
-                            key=f"edit_ico_c_{cat_idx}",
+                            key=f"edit_ico_c_{cat_nombre}",
                             label_visibility="collapsed",
                             on_change=auto_editar_cat_costo,
                             args=(cat_idx, cat_nombre)
@@ -1978,7 +2063,7 @@ with pestana1:
                         st.text_input(
                             "Nombre Categoría",
                             value=cat_nombre,
-                            key=f"edit_nom_c_{cat_idx}",
+                            key=f"edit_nom_c_{cat_nombre}",
                             label_visibility="collapsed",
                             on_change=auto_editar_cat_costo,
                             args=(cat_idx, cat_nombre)
@@ -2037,7 +2122,7 @@ with pestana1:
                             guardar_datos(datos)
                             st.rerun()
 
-                with st.form(f"form_sub_costo_{cat_idx}", clear_on_submit=True):
+                with st.form(f"form_sub_costo_{cat_nombre}", clear_on_submit=True):
                     sc1, sc2, sc3 = st.columns([2.2, 1.35, 1.05])
                     with sc1:
                         sub_nom_c = st.text_input(
@@ -2068,7 +2153,7 @@ with pestana1:
                             st.rerun()
 
                 if not items_cat:
-                    if st.button(f"🗑️ Eliminar categoría vacía '{cat_nombre}'", key=f"del_cat_c_{cat_idx}"):
+                    if st.button(f"🗑️ Eliminar categoría vacía '{cat_nombre}'", key=f"del_cat_c_{cat_nombre}"):
                         datos["categorias_costos"].remove(cat_nombre)
                         guardar_datos(datos)
                         st.rerun()
@@ -2080,7 +2165,6 @@ with pestana1:
     # ---------------- INGRESOS ----------------
     with col_der:
         st.markdown("<h3 style='color: #117864; margin-bottom: 6px;'>📈 Mis Ingresos Mensuales</h3>", unsafe_allow_html=True)
-        st.caption("💡 Mantené apretado el encabezado (⠿) de cualquier categoría y arrastrala hacia arriba o abajo para moverla.")
 
         with st.expander("➕ AGREGAR NUEVA CATEGORÍA DE INGRESOS"):
             c_ni1, c_ni2 = st.columns([2.8, 1.2])
@@ -2112,7 +2196,7 @@ with pestana1:
             with st.expander(titulo_cat_i, expanded=False):
                 editar_cat_i = st.checkbox(
                     "✏️ Editar nombre o ícono de la categoría",
-                    key=f"chk_edit_i_{cat_idx_i}"
+                    key=f"chk_edit_i_{cat_nombre_i}"
                 )
                 if editar_cat_i:
                     opciones_ico_i = list(dict.fromkeys([icono_cat_i] + ICONOS_DISPONIBLES))
@@ -2122,7 +2206,7 @@ with pestana1:
                             "Ícono",
                             options=opciones_ico_i,
                             index=0,
-                            key=f"edit_ico_i_{cat_idx_i}",
+                            key=f"edit_ico_i_{cat_nombre_i}",
                             label_visibility="collapsed",
                             on_change=auto_editar_cat_ingreso,
                             args=(cat_idx_i, cat_nombre_i)
@@ -2131,7 +2215,7 @@ with pestana1:
                         st.text_input(
                             "Nombre Categoría",
                             value=cat_nombre_i,
-                            key=f"edit_nom_i_{cat_idx_i}",
+                            key=f"edit_nom_i_{cat_nombre_i}",
                             label_visibility="collapsed",
                             on_change=auto_editar_cat_ingreso,
                             args=(cat_idx_i, cat_nombre_i)
@@ -2190,7 +2274,7 @@ with pestana1:
                             guardar_datos(datos)
                             st.rerun()
 
-                with st.form(f"form_sub_ing_{cat_idx_i}", clear_on_submit=True):
+                with st.form(f"form_sub_ing_{cat_nombre_i}", clear_on_submit=True):
                     si1, si2, si3 = st.columns([2.2, 1.35, 1.05])
                     with si1:
                         sub_nom_i = st.text_input(
@@ -2221,7 +2305,7 @@ with pestana1:
                             st.rerun()
 
                 if not items_cat_i:
-                    if st.button(f"🗑️ Eliminar categoría vacía '{cat_nombre_i}'", key=f"del_cat_i_{cat_idx_i}"):
+                    if st.button(f"🗑️ Eliminar categoría vacía '{cat_nombre_i}'", key=f"del_cat_i_{cat_nombre_i}"):
                         datos["categorias_ingresos"].remove(cat_nombre_i)
                         guardar_datos(datos)
                         st.rerun()
@@ -2242,7 +2326,8 @@ with pestana1:
         horizontal=True
     )
 
-    col_chart_c, col_chart_i = st.columns(2, gap="medium")
+    proporcion_cols_grafico = [1.4, 0.9] if modo_grafico.startswith("Por Categoría") else [1, 1]
+    col_chart_c, col_chart_i = st.columns(proporcion_cols_grafico, gap="medium")
 
     with col_chart_c:
         st.markdown(
@@ -2255,7 +2340,7 @@ with pestana1:
                 df_pie_c = df_c_raw.groupby("grupo", as_index=False)["monto"].sum().sort_values(by="monto", ascending=False)
                 col_label_c = "grupo"
                 titulo_col_c = "Categoría"
-                fig_c = crear_torta_2d(df_pie_c, "monto", col_label_c)
+                fig_c = crear_torta_2d(df_pie_c, "monto", col_label_c, tamano="grande", usar_minusculas=True)
             else:
                 df_pie_c = df_c_raw.sort_values(by="monto", ascending=False).copy()
                 df_pie_c["etiqueta"] = df_pie_c["categoria"]
@@ -2288,7 +2373,7 @@ with pestana1:
                 df_pie_i = df_i_raw.groupby("grupo", as_index=False)["monto"].sum().sort_values(by="monto", ascending=False)
                 col_label_i = "grupo"
                 titulo_col_i = "Categoría"
-                fig_i = crear_torta_2d(df_pie_i, "monto", col_label_i)
+                fig_i = crear_torta_2d(df_pie_i, "monto", col_label_i, tamano="chico", usar_minusculas=True)
             else:
                 df_pie_i = df_i_raw.sort_values(by="monto", ascending=False).copy()
                 df_pie_i["etiqueta"] = df_pie_i["concepto"]
