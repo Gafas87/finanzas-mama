@@ -84,13 +84,60 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
         const win = window.parent;
         const doc = win.document;
 
-        // 1. Envolver el emoji 🍀 de las solapas principales para darle 1.3em y opacidad 1 (activa) / 0.5 (inactiva)
+        // 1. Estilizar las solapas principales con 🍀 (1.3em, opacidad 1 activa / 0.5 inactiva) y eliminar la línea roja inferior
         function estilizarTrebolesSolapas() {
+            const highlights = doc.querySelectorAll('[data-baseweb="tab-highlight"], [data-baseweb="tab-border"]');
+            highlights.forEach(el => {
+                el.style.setProperty('display', 'none', 'important');
+                el.style.setProperty('height', '0px', 'important');
+                el.style.setProperty('background', 'transparent', 'important');
+                el.style.setProperty('background-color', 'transparent', 'important');
+                el.style.setProperty('border', 'none', 'important');
+            });
+
+            const tabLists = doc.querySelectorAll('[data-baseweb="tab-list"]');
+            tabLists.forEach(tl => {
+                tl.style.setProperty('height', 'auto', 'important');
+                tl.style.setProperty('min-height', '72px', 'important');
+                tl.style.setProperty('overflow', 'visible', 'important');
+                tl.style.setProperty('padding', '8px 4px', 'important');
+                tl.style.setProperty('gap', '16px', 'important');
+                tl.style.setProperty('align-items', 'center', 'important');
+                tl.style.setProperty('border', 'none', 'important');
+            });
+
             const tabs = doc.querySelectorAll('button[data-baseweb="tab"]');
             tabs.forEach(tab => {
                 const isSelected = tab.getAttribute('aria-selected') === 'true';
+                tab.style.setProperty('border-radius', '999px', 'important');
+                tab.style.setProperty('min-height', '58px', 'important');
+                tab.style.setProperty('height', 'auto', 'important');
+                tab.style.setProperty('padding', '12px 32px', 'important');
+                tab.style.setProperty('transition', 'all 0.25s ease-in-out', 'important');
+                tab.style.setProperty('overflow', 'visible', 'important');
+
+                if (isSelected) {
+                    tab.style.setProperty('background', '#E6F7EF', 'important');
+                    tab.style.setProperty('background-color', '#E6F7EF', 'important');
+                    tab.style.setProperty('border', '2px solid #A8DFC4', 'important');
+                    tab.style.setProperty('box-shadow', '0 4px 14px rgba(45, 106, 79, 0.14)', 'important');
+                } else {
+                    tab.style.setProperty('background', '#F9FAFB', 'important');
+                    tab.style.setProperty('background-color', '#F9FAFB', 'important');
+                    tab.style.setProperty('border', '1.5px solid #D8ECE3', 'important');
+                    tab.style.setProperty('box-shadow', '0 2px 6px rgba(0, 0, 0, 0.04)', 'important');
+                }
+
                 const p = tab.querySelector('[data-testid="stMarkdownContainer"] p') || tab.querySelector('p');
                 if (p) {
+                    p.style.setProperty('font-size', '1.22rem', 'important');
+                    p.style.setProperty('font-weight', '800', 'important');
+                    p.style.setProperty('color', isSelected ? '#1B4332' : '#4B5563', 'important');
+                    p.style.setProperty('margin', '0px', 'important');
+                    p.style.setProperty('display', 'inline-flex', 'important');
+                    p.style.setProperty('align-items', 'center', 'important');
+                    p.style.setProperty('gap', '8px', 'important');
+
                     let spanClover = p.querySelector('.trebol-tab-icon');
                     if (!spanClover && (p.textContent || '').includes('🍀')) {
                         const textoLimpio = (p.textContent || '').replace('🍀', '').trim();
@@ -98,13 +145,12 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                         spanClover = p.querySelector('.trebol-tab-icon');
                     }
                     if (spanClover) {
-                        spanClover.style.fontSize = '1.3em';
-                        spanClover.style.lineHeight = '1';
-                        spanClover.style.verticalAlign = 'middle';
-                        spanClover.style.marginRight = '8px';
-                        spanClover.style.display = 'inline-block';
-                        spanClover.style.transition = 'opacity 0.25s ease';
-                        spanClover.style.opacity = isSelected ? '1' : '0.5';
+                        spanClover.style.setProperty('font-size', '1.3em', 'important');
+                        spanClover.style.setProperty('line-height', '1', 'important');
+                        spanClover.style.setProperty('vertical-align', 'middle', 'important');
+                        spanClover.style.setProperty('display', 'inline-block', 'important');
+                        spanClover.style.setProperty('transition', 'opacity 0.25s ease', 'important');
+                        spanClover.style.setProperty('opacity', isSelected ? '1' : '0.5', 'important');
                     }
                 }
             });
@@ -164,7 +210,7 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
             extNodes.forEach(n => n.remove());
         }
 
-        // 3. Resaltar "+ AGREGAR NUEVA CATEGORÍA" y compactar botones apilados ▲ y ▼
+        // 3. Resaltar "+ AGREGAR NUEVA CATEGORÍA" y compactar únicamente los botones ▲ y ▼ de categorías
         function estilizarSolapasYBotonesOrden() {
             const todosDetails = Array.from(doc.querySelectorAll('details'));
             todosDetails.forEach(det => {
@@ -209,11 +255,12 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                 }
             });
 
-            // Ajustar botones ▲ y ▼ apilados para que la suma de ambos (21px + 2px + 21px = 44px) no supere el alto de la categoría
+            // Ajustar únicamente los botones ▲ y ▼ y su columna inmediata (sin tocar ningún contenedor padre de la página)
             const botones = Array.from(doc.querySelectorAll('button'));
             botones.forEach(btn => {
                 const t = (btn.innerText || btn.textContent || '').trim();
                 if (t === '▲' || t === '▼') {
+                    btn.classList.add('btn-flecha-cat');
                     btn.style.setProperty('height', '21px', 'important');
                     btn.style.setProperty('min-height', '21px', 'important');
                     btn.style.setProperty('max-height', '21px', 'important');
@@ -229,9 +276,12 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                         ch.style.setProperty('margin', '0px', 'important');
                         ch.style.setProperty('padding', '0px', 'important');
                     });
-                    const vBlock = btn.closest('[data-testid="stVerticalBlock"]');
-                    if (vBlock) {
-                        vBlock.style.setProperty('gap', '2px', 'important');
+                    const col = btn.closest('[data-testid="stColumn"]');
+                    if (col) {
+                        const innerVb = col.querySelector('[data-testid="stVerticalBlock"]');
+                        if (innerVb) {
+                            innerVb.style.setProperty('gap', '2px', 'important');
+                        }
                     }
                 }
             });
@@ -336,7 +386,6 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
         const abortCtrl = new AbortController();
         const sig = abortCtrl.signal;
 
-        // Navegación con flechas Arriba/Abajo del teclado entre celdas de texto
         doc.addEventListener('keydown', function(e) {
             const active = doc.activeElement;
             if (!active || active.tagName !== 'INPUT') return;
@@ -1135,55 +1184,30 @@ def obtener_cotizaciones(simbolos_acciones, simbolos_cripto):
     return cotiz
 
 
-# ----------------- ESTILOS CSS OPTIMIZADOS (LAPTOP + ANDROID) -----------------
+# ----------------- ESTILOS CSS ACOTADOS Y SEGUROS (LAPTOP + ANDROID) -----------------
 st.markdown("""
 <style>
-    html, body, [class*="css"], p, span, label, div {
-        font-size: 16px;
-        color: #374151;
+    /* 1. Evitar que la barra superior fija de Streamlit tape las solapas o el cuadro de ingreso */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        background-color: transparent !important;
     }
-
-    /* Ocultar TODOS los carteles "Press Enter to apply" / "Press Enter to submit" (Req 3) */
-    div[data-testid="InputInstructions"],
-    [data-testid="InputInstructions"],
-    div[data-testid="InputInstructions"] > span {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        height: 0px !important;
-        width: 0px !important;
-        overflow: hidden !important;
-        pointer-events: none !important;
-    }
-
-    /* Aprovechar al máximo el ancho de la pantalla en notebook y celular */
     .block-container {
         max-width: 98% !important;
-        padding-left: 1.4rem !important;
-        padding-right: 1.4rem !important;
-        padding-top: 1.4rem !important;
+        padding-top: 3.6rem !important;
+        padding-left: 1.5rem !important;
+        padding-right: 1.5rem !important;
         padding-bottom: 2.5rem !important;
     }
 
-    @media (max-width: 768px) {
-        .block-container {
-            max-width: 100% !important;
-            padding-left: 0.65rem !important;
-            padding-right: 0.65rem !important;
-            padding-top: 0.8rem !important;
-        }
-        .kpi-value {
-            font-size: 1.65rem !important;
-        }
-        .stTabs [data-baseweb="tab"] {
-            padding: 10px 14px !important;
-            height: 52px !important;
-        }
-        .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-            font-size: 1.1rem !important;
-        }
+    /* 2. Ocultar el aviso "Press Enter to apply" */
+    div[data-testid="InputInstructions"],
+    [data-testid="InputInstructions"] {
+        display: none !important;
+        visibility: hidden !important;
     }
 
+    /* 3. Cuadro de Login */
     .jardin-login-box {
         background: linear-gradient(145deg, #EAF6EE 0%, #F5F0FF 100%);
         border: 2px solid #95D5B2;
@@ -1191,7 +1215,7 @@ st.markdown("""
         padding: 28px 24px 18px 24px;
         box-shadow: 0 8px 20px rgba(45, 106, 79, 0.08);
         text-align: center;
-        margin-top: 18px;
+        margin-top: 10px;
         margin-bottom: 14px;
     }
     .jardin-login-title {
@@ -1206,134 +1230,128 @@ st.markdown("""
         font-weight: 500;
         margin-bottom: 4px;
     }
-
-    /* Botón principal de login "Ingresar a Mi Jardín" */
     div[data-testid="stFormSubmitButton"] button {
         background: linear-gradient(90deg, #40916C 0%, #2D6A4F 100%) !important;
         color: #FFFFFF !important;
         font-weight: 700 !important;
-        font-size: 1.15rem !important;
         border-radius: 12px !important;
         border: 2px solid #1B4332 !important;
-        min-height: 48px !important;
+        min-height: 46px !important;
     }
     div[data-testid="stFormSubmitButton"] button p,
     div[data-testid="stFormSubmitButton"] button span {
         color: #FFFFFF !important;
         font-weight: 700 !important;
-        font-size: 1.1rem !important;
     }
 
-    /* CAMBIO 1: Solapas principales estilo píldora pastel en armonía verde menta con 🍀 */
+    /* 4. CAMBIO 1: Solapas principales en forma de píldora verde menta con 🍀 (visibles y sin recortes) */
+    .stTabs {
+        overflow: visible !important;
+    }
     .stTabs [data-baseweb="tab-highlight"],
-    .stTabs [data-baseweb="tab-border"] {
+    .stTabs [data-baseweb="tab-border"],
+    div[data-baseweb="tab-highlight"],
+    div[data-baseweb="tab-border"] {
         display: none !important;
         height: 0px !important;
-        background: none !important;
+        background: transparent !important;
+        background-color: transparent !important;
         border: none !important;
     }
     .stTabs [data-baseweb="tab-list"] {
-        gap: 18px !important;
-        margin-bottom: 1.4rem !important;
-        padding: 6px 2px !important;
+        gap: 16px !important;
+        margin-bottom: 1.25rem !important;
+        padding: 8px 4px !important;
+        height: auto !important;
+        min-height: 72px !important;
+        overflow: visible !important;
         background: transparent !important;
         border: none !important;
-        box-shadow: none !important;
+        align-items: center !important;
         flex-wrap: wrap !important;
     }
-    button[data-baseweb="tab"],
-    .stTabs [data-baseweb="tab"] {
-        min-height: 64px !important;
+    .stTabs button[data-baseweb="tab"] {
+        min-height: 58px !important;
         height: auto !important;
-        min-width: 270px !important;
-        padding: 14px 36px !important;
-        background: #F9FAFB !important;
+        padding: 12px 32px !important;
         background-color: #F9FAFB !important;
         border-radius: 999px !important;
-        border: 2px solid #D8ECE3 !important;
-        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.04) !important;
+        border: 1.5px solid #D8ECE3 !important;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
         transition: all 0.25s ease-in-out !important;
+        overflow: visible !important;
     }
-    button[data-baseweb="tab"]:hover,
-    .stTabs [data-baseweb="tab"]:hover {
-        background: #F0FBF6 !important;
+    .stTabs button[data-baseweb="tab"]:hover {
         background-color: #F0FBF6 !important;
         border-color: #A8DFC4 !important;
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 14px rgba(45, 106, 79, 0.10) !important;
-    }
-    button[data-baseweb="tab"][aria-selected="true"],
-    .stTabs [aria-selected="true"] {
-        background: #E6F7EF !important;
-        background-color: #E6F7EF !important;
-        border: 2px solid #82CFA9 !important;
-        border-radius: 999px !important;
-        box-shadow: 0 6px 18px rgba(45, 106, 79, 0.15) !important;
         transform: translateY(-1px) !important;
+        box-shadow: 0 5px 12px rgba(45, 106, 79, 0.10) !important;
     }
-    button[data-baseweb="tab"] [data-testid="stMarkdownContainer"] p,
-    button[data-baseweb="tab"] p {
-        font-size: 1.3rem !important;
+    .stTabs button[data-baseweb="tab"][aria-selected="true"] {
+        background-color: #E6F7EF !important;
+        border: 2px solid #A8DFC4 !important;
+        border-radius: 999px !important;
+        box-shadow: 0 4px 14px rgba(45, 106, 79, 0.14) !important;
+    }
+    .stTabs button[data-baseweb="tab"] [data-testid="stMarkdownContainer"] p,
+    .stTabs button[data-baseweb="tab"] p {
+        font-size: 1.22rem !important;
         font-weight: 800 !important;
         color: #4B5563 !important;
         text-transform: uppercase !important;
-        letter-spacing: 0.5px !important;
+        letter-spacing: 0.4px !important;
         margin: 0 !important;
         display: inline-flex !important;
         align-items: center !important;
-        justify-content: center !important;
-        gap: 6px !important;
+        gap: 8px !important;
         line-height: 1.2 !important;
     }
-    button[data-baseweb="tab"][aria-selected="true"] [data-testid="stMarkdownContainer"] p,
-    button[data-baseweb="tab"][aria-selected="true"] p {
+    .stTabs button[data-baseweb="tab"][aria-selected="true"] [data-testid="stMarkdownContainer"] p,
+    .stTabs button[data-baseweb="tab"][aria-selected="true"] p {
         color: #1B4332 !important;
-        text-shadow: none !important;
     }
-    button[data-baseweb="tab"] .trebol-tab-icon {
+    .stTabs button[data-baseweb="tab"] .trebol-tab-icon {
         font-size: 1.3em !important;
         line-height: 1 !important;
         vertical-align: middle !important;
         display: inline-block !important;
-        transition: opacity 0.25s ease-in-out !important;
         opacity: 0.5 !important;
+        transition: opacity 0.25s ease-in-out !important;
     }
-    button[data-baseweb="tab"][aria-selected="true"] .trebol-tab-icon {
+    .stTabs button[data-baseweb="tab"][aria-selected="true"] .trebol-tab-icon {
         opacity: 1 !important;
     }
 
-    /* CAMBIO 2: Botones "+ AGREGAR NUEVA CATEGORÍA DE COSTOS" (rojo/coral suave) y "DE INGRESOS" (verde menta) */
-    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details,
-    .element-container:has(.hook-agregar-costo) + .element-container details,
+    /* 5. CAMBIO 2: Botones "+ AGREGAR NUEVA CATEGORÍA DE COSTOS" y "DE INGRESOS" */
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-costo),
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-ingreso) {
+        display: none !important;
+    }
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-costo) + div[data-testid="stElementContainer"] details,
     details[data-add-cat="costo"] {
         background-color: #FFF2EE !important;
         border: 2px solid #E07A5F !important;
         border-radius: 16px !important;
-        box-shadow: 0 4px 12px rgba(224, 122, 95, 0.15) !important;
-        margin-bottom: 14px !important;
-        transition: all 0.22s ease-in-out !important;
+        box-shadow: 0 4px 12px rgba(224, 122, 95, 0.14) !important;
+        margin-bottom: 12px !important;
         overflow: hidden !important;
     }
-    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary,
-    .element-container:has(.hook-agregar-costo) + .element-container details > summary,
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary,
     details[data-add-cat="costo"] > summary {
         background-color: #FADBD8 !important;
         color: #922B21 !important;
         font-weight: 800 !important;
-        padding: 12px 18px !important;
+        padding: 12px 16px !important;
         border-radius: 14px !important;
-        transition: all 0.22s ease-in-out !important;
+        transition: background-color 0.2s ease !important;
     }
-    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary:hover,
-    .element-container:has(.hook-agregar-costo) + .element-container details > summary:hover,
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary:hover,
     details[data-add-cat="costo"] > summary:hover {
         background-color: #F5B7B1 !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 6px 14px rgba(192, 57, 43, 0.18) !important;
     }
-    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary p,
-    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary span,
-    div[data-testid="stElementContainer"]:has(.hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary svg,
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary p,
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary span,
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-costo) + div[data-testid="stElementContainer"] details > summary svg,
     details[data-add-cat="costo"] > summary p,
     details[data-add-cat="costo"] > summary span,
     details[data-add-cat="costo"] > summary svg {
@@ -1342,37 +1360,31 @@ st.markdown("""
         font-weight: 800 !important;
     }
 
-    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details,
-    .element-container:has(.hook-agregar-ingreso) + .element-container details,
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-ingreso) + div[data-testid="stElementContainer"] details,
     details[data-add-cat="ingreso"] {
         background-color: #ECFDF5 !important;
         border: 2px solid #48C9B0 !important;
         border-radius: 16px !important;
-        box-shadow: 0 4px 12px rgba(72, 201, 176, 0.15) !important;
-        margin-bottom: 14px !important;
-        transition: all 0.22s ease-in-out !important;
+        box-shadow: 0 4px 12px rgba(72, 201, 176, 0.14) !important;
+        margin-bottom: 12px !important;
         overflow: hidden !important;
     }
-    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary,
-    .element-container:has(.hook-agregar-ingreso) + .element-container details > summary,
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary,
     details[data-add-cat="ingreso"] > summary {
         background-color: #D1F2EB !important;
         color: #0E6251 !important;
         font-weight: 800 !important;
-        padding: 12px 18px !important;
+        padding: 12px 16px !important;
         border-radius: 14px !important;
-        transition: all 0.22s ease-in-out !important;
+        transition: background-color 0.2s ease !important;
     }
-    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary:hover,
-    .element-container:has(.hook-agregar-ingreso) + .element-container details > summary:hover,
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary:hover,
     details[data-add-cat="ingreso"] > summary:hover {
         background-color: #A3E4D7 !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 6px 14px rgba(17, 120, 100, 0.18) !important;
     }
-    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary p,
-    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary span,
-    div[data-testid="stElementContainer"]:has(.hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary svg,
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary p,
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary span,
+    div[data-testid="stElementContainer"]:has(> div > .hook-agregar-ingreso) + div[data-testid="stElementContainer"] details > summary svg,
     details[data-add-cat="ingreso"] > summary p,
     details[data-add-cat="ingreso"] > summary span,
     details[data-add-cat="ingreso"] > summary svg {
@@ -1381,6 +1393,34 @@ st.markdown("""
         font-weight: 800 !important;
     }
 
+    /* 6. Botones apilados ▲ y ▼ exclusivamente (sin afectar ningún otro contenedor ni botón) */
+    div[data-testid="stElementContainer"]:has(> div > .flechas-cat-stack) {
+        display: none !important;
+    }
+    div[data-testid="stColumn"]:has(.flechas-cat-stack) > div > div[data-testid="stVerticalBlock"] {
+        gap: 2px !important;
+    }
+    button.btn-flecha-cat,
+    div[data-testid="stColumn"]:has(.flechas-cat-stack) div[data-testid="stButton"] button {
+        height: 21px !important;
+        min-height: 21px !important;
+        max-height: 21px !important;
+        width: 28px !important;
+        min-width: 28px !important;
+        padding: 0px !important;
+        margin: 0px !important;
+        border-radius: 6px !important;
+        line-height: 1 !important;
+    }
+    button.btn-flecha-cat p,
+    div[data-testid="stColumn"]:has(.flechas-cat-stack) div[data-testid="stButton"] button p {
+        font-size: 0.68rem !important;
+        line-height: 1 !important;
+        margin: 0px !important;
+        padding: 0px !important;
+    }
+
+    /* 7. Tarjetas KPI y encabezados de tabla originales */
     .metric-card {
         padding: 1.35rem;
         border-radius: 16px;
@@ -1442,8 +1482,6 @@ st.markdown("""
         opacity: 0.9;
         margin-top: 0.45rem;
     }
-
-    /* Encabezado de tabla en un solo renglón sin cortarse nunca (ACT.) */
     .col-header {
         font-size: 0.82rem;
         font-weight: 700;
@@ -1457,7 +1495,6 @@ st.markdown("""
         overflow: visible !important;
         word-break: keep-all !important;
     }
-
     div[data-testid="stCheckbox"] {
         filter: hue-rotate(125deg) saturate(0.85) brightness(0.95) !important;
         padding-top: 0.35rem;
@@ -1466,87 +1503,23 @@ st.markdown("""
         white-space: nowrap !important;
     }
 
-    div[data-testid="stTextInput"]:has(input:disabled) > div,
-    div[data-testid="stNumberInput"]:has(input:disabled) > div {
-        background-color: #E5E7EB !important;
-        border-color: #D1D5DB !important;
-        opacity: 0.65 !important;
-    }
-    input:disabled {
-        background-color: #E5E7EB !important;
-        color: #9CA3AF !important;
-        -webkit-text-fill-color: #9CA3AF !important;
-    }
-
-    div[data-testid="stButton"] button,
-    div[data-testid="stDownloadButton"] button {
-        border-radius: 10px !important;
-        border: 1px solid #D1D5DB !important;
-        background-color: #FFFFFF !important;
-        padding: 0.4rem 0.65rem !important;
-        min-width: 44px !important;
-        min-height: 44px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-    }
-    div[data-testid="stButton"] button p,
-    div[data-testid="stDownloadButton"] button p {
-        font-size: 1.05rem !important;
-        font-weight: 600 !important;
-        line-height: 1.1 !important;
-        margin: 0 !important;
-        overflow: visible !important;
-    }
-    div[data-testid="stButton"] button:hover,
-    div[data-testid="stDownloadButton"] button:hover {
-        background-color: #F3E8FF !important;
-        border-color: #C084FC !important;
-    }
-
-    details {
-        border-radius: 18px !important;
-        border: 1px solid #E5E7EB !important;
-        background: #FFFFFF !important;
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.03) !important;
-        transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
-    }
-    details:hover {
-        border-color: #C084FC !important;
-        box-shadow: 0 6px 16px rgba(124, 58, 237, 0.08) !important;
-    }
-
-    /* Botones compactos apilados ▲ y ▼ (uno arriba del otro, altura total 44px igual al alto de la categoría) */
-    div[data-testid="stElementContainer"]:has(.flechas-cat-stack),
-    .element-container:has(.flechas-cat-stack) {
-        display: none !important;
-        height: 0px !important;
-        margin: 0px !important;
-        padding: 0px !important;
-    }
-    div[data-testid="stVerticalBlock"]:has(.flechas-cat-stack) {
-        gap: 2px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: center !important;
-        align-items: center !important;
-    }
-    div[data-testid="stVerticalBlock"]:has(.flechas-cat-stack) div[data-testid="stButton"] button {
-        height: 21px !important;
-        min-height: 21px !important;
-        max-height: 21px !important;
-        width: 28px !important;
-        min-width: 28px !important;
-        padding: 0px !important;
-        margin: 0px !important;
-        border-radius: 6px !important;
-        line-height: 1 !important;
-    }
-    div[data-testid="stVerticalBlock"]:has(.flechas-cat-stack) div[data-testid="stButton"] button p {
-        font-size: 0.68rem !important;
-        line-height: 1 !important;
-        margin: 0px !important;
-        padding: 0px !important;
+    @media (max-width: 768px) {
+        .block-container {
+            max-width: 100% !important;
+            padding-top: 3.2rem !important;
+            padding-left: 0.65rem !important;
+            padding-right: 0.65rem !important;
+        }
+        .kpi-value {
+            font-size: 1.65rem !important;
+        }
+        .stTabs button[data-baseweb="tab"] {
+            padding: 10px 18px !important;
+            min-height: 48px !important;
+        }
+        .stTabs button[data-baseweb="tab"] [data-testid="stMarkdownContainer"] p {
+            font-size: 1.05rem !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
