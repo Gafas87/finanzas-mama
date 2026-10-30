@@ -85,12 +85,14 @@ def predecir_icono_categoria(nombre, tipo="costo"):
 
 
 # ----------------- INTERACTIVIDAD: ESTILOS DINÁMICOS, CONECTORES TORTA Y ANTI-POPUP -----------------
-def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
+def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None, ubicaciones_guardadas=None):
+    ubicaciones_json = json.dumps((ubicaciones_guardadas or [])[:8], ensure_ascii=False)
     js_code = r"""
     <script>
     (function() {
         const win = window.parent;
         const doc = win.document;
+        const ubicacionesRecientes = __UBICACIONES_JSON__;
 
         // 1. Estilizar las solapas principales con 🍀 (1.3em, opacidad 1 activa / 0.5 inactiva) y eliminar la línea roja inferior
         function estilizarTrebolesSolapas() {
@@ -426,11 +428,129 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
             });
         }
 
+        // 5. Dropdown sugerido de las últimas 8 ubicaciones en "2. Ubicación, ¿dónde está?" permitiendo escritura libre
+        function configurarDropdownUbicacion() {
+            const inp = doc.querySelector('input[aria-label="2. Ubicación, ¿dónde está?"]');
+            let menu = doc.getElementById('jardin-ubicacion-dropdown');
+
+            if (!inp || inp.offsetParent === null) {
+                if (menu) menu.style.display = 'none';
+                return;
+            }
+
+            const wrapper = inp.parentElement;
+            if (wrapper && !wrapper.querySelector('.jardin-ubic-chevron')) {
+                wrapper.style.position = 'relative';
+                const chev = doc.createElement('span');
+                chev.className = 'jardin-ubic-chevron';
+                chev.textContent = '▾';
+                chev.style.cssText = 'position:absolute;right:12px;top:50%;transform:translateY(-50%);color:#4B5563;font-size:0.95rem;cursor:pointer;user-select:none;z-index:5;pointer-events:auto;';
+                chev.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    inp.focus();
+                    mostrarMenuUbicacion(inp, '');
+                });
+                wrapper.appendChild(chev);
+                inp.style.paddingRight = '30px';
+            }
+
+            if (!menu) {
+                menu = doc.createElement('div');
+                menu.id = 'jardin-ubicacion-dropdown';
+                menu.style.cssText = 'position:fixed;display:none;background:#FFFFFF;border:1.5px solid #C4B5FD;border-radius:12px;box-shadow:0 8px 22px rgba(91,75,138,0.16);z-index:999999;max-height:260px;overflow-y:auto;padding:4px 0;font-family:sans-serif;';
+                doc.body.appendChild(menu);
+            }
+
+            function seleccionarUbicacion(valor) {
+                const setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
+                setter.call(inp, valor);
+                inp.dispatchEvent(new Event('input', { bubbles: true }));
+                inp.dispatchEvent(new Event('change', { bubbles: true }));
+                inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                menu.style.display = 'none';
+                setTimeout(() => { try { inp.blur(); } catch (e) {} }, 30);
+            }
+
+            function mostrarMenuUbicacion(targetInp, filtroTexto) {
+                if (!ubicacionesRecientes || ubicacionesRecientes.length === 0) {
+                    menu.style.display = 'none';
+                    return;
+                }
+                const f = (filtroTexto || '').trim().toLowerCase();
+                const coincideExacto = ubicacionesRecientes.some(u => u.toLowerCase() === f);
+                const filtradas = (!f || coincideExacto)
+                    ? ubicacionesRecientes
+                    : ubicacionesRecientes.filter(u => u.toLowerCase().includes(f));
+
+                if (filtradas.length === 0) {
+                    menu.style.display = 'none';
+                    return;
+                }
+
+                menu.innerHTML = '';
+                const header = doc.createElement('div');
+                header.textContent = 'Últimas ubicaciones guardadas';
+                header.style.cssText = 'padding:5px 12px;font-size:0.74rem;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.4px;border-bottom:1px solid #F3F4F6;';
+                menu.appendChild(header);
+
+                filtradas.forEach(ubic => {
+                    const item = doc.createElement('div');
+                    item.textContent = ubic;
+                    item.style.cssText = 'padding:8px 14px;font-size:0.95rem;color:#1F2937;cursor:pointer;transition:background 0.15s ease;font-weight:500;';
+                    item.addEventListener('mouseenter', () => {
+                        item.style.background = '#F3E8FF';
+                        item.style.color = '#4A235A';
+                    });
+                    item.addEventListener('mouseleave', () => {
+                        item.style.background = '#FFFFFF';
+                        item.style.color = '#1F2937';
+                    });
+                    item.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        seleccionarUbicacion(ubic);
+                    });
+                    menu.appendChild(item);
+                });
+
+                const rect = targetInp.getBoundingClientRect();
+                menu.style.left = rect.left + 'px';
+                menu.style.top = (rect.bottom + 4) + 'px';
+                menu.style.width = rect.width + 'px';
+                menu.style.display = 'block';
+            }
+
+            if (inp.getAttribute('data-ubic-bound') !== 'true') {
+                inp.setAttribute('data-ubic-bound', 'true');
+                inp.addEventListener('focus', function() {
+                    mostrarMenuUbicacion(inp, inp.value);
+                });
+                inp.addEventListener('click', function() {
+                    mostrarMenuUbicacion(inp, inp.value);
+                });
+                inp.addEventListener('input', function() {
+                    mostrarMenuUbicacion(inp, inp.value);
+                });
+                inp.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape' || e.key === 'Enter' || e.key === 'Tab') {
+                        menu.style.display = 'none';
+                    }
+                });
+                inp.addEventListener('blur', function() {
+                    setTimeout(() => {
+                        if (menu) menu.style.display = 'none';
+                    }, 160);
+                });
+            }
+        }
+
         function actualizarInterfaz() {
             estilizarTrebolesSolapas();
             limpiarInputsYPopups();
             estilizarSolapasYBotonesOrden();
             asegurarLineasConectorasTortas();
+            configurarDropdownUbicacion();
         }
 
         if (win.__jardinCleanupListeners) {
@@ -488,7 +608,7 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
     })();
     </script>
     """
-    components.html(js_code, height=0, width=0)
+    components.html(js_code.replace("__UBICACIONES_JSON__", ubicaciones_json), height=0, width=0)
 
 
 # ----------------- GRÁFICO DE TORTA 2D CON 1 DECIMAL Y SIN POP-UPS (REQ 3 y 4) -----------------
@@ -677,14 +797,105 @@ def clasificar_costo_existente(nombre):
     return "HOGAR Y OTROS"
 
 
+# ----------------- LISTAS DE 100 ACCIONES Y 100 CRIPTOMONEDAS + UBICACIONES -----------------
+ACCIONES_100_BASE = [
+    "AAPL (Apple)", "MSFT (Microsoft)", "NVDA (Nvidia)", "GOOGL (Alphabet / Google)",
+    "AMZN (Amazon)", "META (Meta Platforms)", "TSLA (Tesla)", "BRK-B (Berkshire Hathaway)",
+    "MELI (MercadoLibre)", "KO (Coca-Cola)", "SPY (S&P 500 ETF)", "QQQ (Nasdaq 100 ETF)",
+    "DIA (Dow Jones ETF)", "YPFD (YPF)", "GGAL (Grupo Financiero Galicia)", "BMA (Banco Macro)",
+    "PAM (Pampa Energía)", "VIST (Vista Energy)", "TGS (Transportadora de Gas del Sur)",
+    "CEPU (Central Puerto)", "GLOB (Globant)", "LLY (Eli Lilly)", "AVGO (Broadcom)",
+    "JPM (JPMorgan Chase)", "V (Visa)", "WMT (Walmart)", "XOM (Exxon Mobil)",
+    "MA (Mastercard)", "UNH (UnitedHealth)", "COST (Costco)", "PG (Procter & Gamble)",
+    "JNJ (Johnson & Johnson)", "HD (Home Depot)", "NFLX (Netflix)", "ABBV (AbbVie)",
+    "BAC (Bank of America)", "CRM (Salesforce)", "ORCL (Oracle)", "CVX (Chevron)",
+    "MRK (Merck)", "AMD (Advanced Micro Devices)", "PEP (PepsiCo)", "TMO (Thermo Fisher)",
+    "LIN (Linde)", "CSCO (Cisco Systems)", "ACN (Accenture)", "ADBE (Adobe)",
+    "WFC (Wells Fargo)", "MCD (McDonald's)", "ABT (Abbott Laboratories)", "DIS (Walt Disney)",
+    "PM (Philip Morris)", "IBM (IBM)", "GE (General Electric)", "INTU (Intuit)",
+    "CAT (Caterpillar)", "VZ (Verizon)", "QCOM (Qualcomm)", "TXN (Texas Instruments)",
+    "NOW (ServiceNow)", "AMGN (Amgen)", "PFE (Pfizer)", "ISRG (Intuitive Surgical)",
+    "UBER (Uber Technologies)", "GS (Goldman Sachs)", "MS (Morgan Stanley)",
+    "AXP (American Express)", "RTX (Raytheon)", "SPGI (S&P Global)", "NEE (NextEra Energy)",
+    "HON (Honeywell)", "UNP (Union Pacific)", "BKNG (Booking Holdings)", "LOW (Lowe's)",
+    "T (AT&T)", "COP (ConocoPhillips)", "BLK (BlackRock)", "SYK (Stryker)",
+    "TJX (TJX Companies)", "PGR (Progressive)", "C (Citigroup)", "SCHW (Charles Schwab)",
+    "BA (Boeing)", "INTC (Intel)", "NKE (Nike)", "SBUX (Starbucks)", "DE (John Deere)",
+    "LMT (Lockheed Martin)", "MDLZ (Mondelez)", "ADP (Automatic Data Processing)",
+    "GILD (Gilead Sciences)", "BMY (Bristol-Myers Squibb)", "MU (Micron Technology)",
+    "PANW (Palo Alto Networks)", "PLTR (Palantir Technologies)", "SHOP (Shopify)",
+    "PYPL (PayPal)", "COIN (Coinbase)", "ABNB (Airbnb)", "TSM (Taiwan Semiconductor)",
+    "ASML (ASML Holding)", "NVO (Novo Nordisk)", "TM (Toyota Motor)", "BABA (Alibaba)",
+    "SONY (Sony Group)", "PBR (Petrobras)", "VALE (Vale)", "NU (Nu Holdings / Nubank)"
+]
+
+CRIPTOS_100_BASE = [
+    "BTC (Bitcoin)", "ETH (Ethereum)", "USDT (Tether)", "BNB (BNB / Binance Coin)",
+    "SOL (Solana)", "USDC (USD Coin)", "XRP (Ripple)", "DOGE (Dogecoin)",
+    "TON (Toncoin)", "ADA (Cardano)", "TRX (TRON)", "AVAX (Avalanche)",
+    "SHIB (Shiba Inu)", "LINK (Chainlink)", "DOT (Polkadot)", "BCH (Bitcoin Cash)",
+    "NEAR (NEAR Protocol)", "LTC (Litecoin)", "MATIC (Polygon)", "POL (Polygon Ecosystem)",
+    "DAI (Dai)", "UNI (Uniswap)", "ICP (Internet Computer)", "APT (Aptos)",
+    "KAS (Kaspa)", "ETC (Ethereum Classic)", "XMR (Monero)", "STX (Stacks)",
+    "FET (Fetch.ai / ASI)", "XLM (Stellar)", "OKB (OKB)", "FIL (Filecoin)",
+    "SUI (Sui)", "ARB (Arbitrum)", "ATOM (Cosmos)", "IMX (Immutable)",
+    "RENDER (Render)", "HBAR (Hedera)", "MNT (Mantle)", "CRO (Cronos)",
+    "OP (Optimism)", "VET (VeChain)", "INJ (Injective)", "MKR (Maker)",
+    "AAVE (Aave)", "GRT (The Graph)", "TAO (Bittensor)", "PEPE (Pepe)",
+    "WIF (dogwifhat)", "FLOKI (Floki)", "BONK (Bonk)", "THETA (Theta Network)",
+    "RUNE (THORChain)", "AR (Arweave)", "ALGO (Algorand)", "FTM (Fantom)",
+    "SEI (Sei)", "FLOW (Flow)", "TIA (Celestia)", "LDO (Lido DAO)",
+    "PYTH (Pyth Network)", "QNT (Quant)", "EGLD (MultiversX)", "AXS (Axie Infinity)",
+    "SAND (The Sandbox)", "MANA (Decentraland)", "GALA (Gala)", "EOS (EOS)",
+    "XTZ (Tezos)", "NEO (Neo)", "KAVA (Kava)", "CHZ (Chiliz)",
+    "MINA (Mina Protocol)", "IOTA (IOTA)", "CFX (Conflux)", "JASMY (JasmyCoin)",
+    "SNX (Synthetix)", "PENDLE (Pendle)", "STRK (Starknet)", "WLD (Worldcoin)",
+    "JUP (Jupiter)", "ENA (Ethena)", "ONDO (Ondo)", "BEAM (Beam)",
+    "DYDX (dYdX)", "CRV (Curve DAO)", "1INCH (1inch)", "COMP (Compound)",
+    "ENS (Ethereum Name Service)", "CAKE (PancakeSwap)", "ZEC (Zcash)", "DASH (Dash)",
+    "ROSE (Oasis Network)", "ZIL (Zilliqa)", "ENJ (Enjin Coin)", "BAT (Basic Attention Token)",
+    "LRC (Loopring)", "QTUM (Qtum)", "CELO (Celo)", "ANKR (Ankr)"
+]
+
+UBICACIONES_BASE = [
+    "Bco Nacion", "Uala", "Mercado Pago", "Binance",
+    "IOL", "Naranja X", "NEXO", "Kraken"
+]
+
+
+def normalizar_lista_activos_con_base(lista_guardada, lista_base):
+    mapa_base = {item.split(" ")[0].upper(): item for item in lista_base}
+    resultado = list(lista_base)
+    vistos = {item.split(" ")[0].upper() for item in resultado}
+    for item in (lista_guardada or []):
+        limpio = str(item or "").strip()
+        if not limpio:
+            continue
+        ticker = limpio.split(" ")[0].upper()
+        if ticker in mapa_base:
+            continue
+        if ticker not in vistos:
+            resultado.append(limpio if "(" in limpio else limpio.upper())
+            vistos.add(ticker)
+    return resultado
+
+
+def registrar_ubicacion_guardada(datos, nueva_ubicacion):
+    loc = str(nueva_ubicacion or "").strip()
+    if not loc or loc.lower() == "sin especificar":
+        return
+    actuales = datos.get("ubicaciones_guardadas", list(UBICACIONES_BASE))
+    filtradas = [u for u in actuales if str(u).strip().lower() != loc.lower()]
+    filtradas.insert(0, loc)
+    datos["ubicaciones_guardadas"] = filtradas[:8]
+    ult = datos.setdefault("ultimas_selecciones_inv", {})
+    ult["ubicacion"] = loc
+
+
 # ----------------- GESTIÓN Y PERSISTENCIA DE DATOS -----------------
 def cargar_datos():
-    criptos_base = ["BTC", "ETH", "USDT", "SOL", "BNB", "ADA", "XRP", "DOT", "DOGE"]
-    acciones_base = [
-        "AAPL (Apple)", "KO (Coca-Cola)", "MELI (MercadoLibre)",
-        "SPY (S&P 500)", "MSFT (Microsoft)", "GOOGL (Google)",
-        "NVDA (Nvidia)", "TSLA (Tesla)", "AMZN (Amazon)", "YPFD (YPF)"
-    ]
+    criptos_base = list(CRIPTOS_100_BASE)
+    acciones_base = list(ACCIONES_100_BASE)
 
     datos_por_defecto = {
         "seguridad": {
@@ -746,6 +957,13 @@ def cargar_datos():
         "precio_terapia": 30000,
         "criptos_guardadas": criptos_base,
         "acciones_guardadas": acciones_base,
+        "ubicaciones_guardadas": list(UBICACIONES_BASE),
+        "ultimas_selecciones_inv": {
+            "tipo": "Dólares USD",
+            "accion": "AAPL (Apple)",
+            "cripto": "BTC (Bitcoin)",
+            "ubicacion": "Bco Nacion"
+        },
         "inversiones": [
             {
                 "tipo": "Criptomonedas",
@@ -831,15 +1049,60 @@ def cargar_datos():
                     inv["tipo"] = "Acciones"
                 elif inv.get("tipo") == "Efectivo / Banco":
                     inv["tipo"] = "Pesos ARS"
+                elif inv.get("tipo") in ["Dólar Billete", "A - Dólar Billete"]:
+                    inv["tipo"] = "Dólares USD"
 
-            criptos_actuales = data.get("criptos_guardadas", criptos_base)
+                if inv.get("activo") in ["Dólar Billete", "A - Dólar Billete"]:
+                    inv["activo"] = "Dólares USD"
+
+                # Sincronizar símbolo con el detalle en caso de ediciones previas (ej. ETH con símbolo BTC)
+                if inv.get("tipo") in ["Criptomonedas", "Acciones"]:
+                    det_ticker = str(inv.get("activo", "")).strip().split(" ")[0].upper()
+                    if det_ticker and det_ticker not in ["USD", "ARS"]:
+                        inv["simbolo"] = det_ticker
+
+            criptos_guardadas_raw = data.get("criptos_guardadas", criptos_base)
             for inv in data.get("inversiones", []):
                 if inv.get("tipo") == "Criptomonedas":
                     sim = inv.get("simbolo", "").upper().strip()
-                    if sim and sim not in criptos_actuales:
-                        criptos_actuales.append(sim)
-            data["criptos_guardadas"] = criptos_actuales
-            data.setdefault("acciones_guardadas", acciones_base)
+                    if sim:
+                        criptos_guardadas_raw.append(sim)
+            data["criptos_guardadas"] = normalizar_lista_activos_con_base(criptos_guardadas_raw, CRIPTOS_100_BASE)
+
+            acciones_guardadas_raw = data.get("acciones_guardadas", acciones_base)
+            for inv in data.get("inversiones", []):
+                if inv.get("tipo") == "Acciones":
+                    act_str = str(inv.get("activo", "")).strip()
+                    if act_str:
+                        acciones_guardadas_raw.append(act_str)
+            data["acciones_guardadas"] = normalizar_lista_activos_con_base(acciones_guardadas_raw, ACCIONES_100_BASE)
+
+            # Inicializar y conservar las últimas 8 ubicaciones distintas (más reciente primero)
+            ubic_guardadas = data.get("ubicaciones_guardadas", [])
+            if not isinstance(ubic_guardadas, list):
+                ubic_guardadas = []
+            if not ubic_guardadas:
+                # Tomar las plataformas ya cargadas en inversiones (de más reciente a más antigua) + base
+                for inv in reversed(data.get("inversiones", [])):
+                    pl = str(inv.get("plataforma", "")).strip()
+                    if pl and pl.lower() != "sin especificar":
+                        if not any(pl.lower() == u.lower() for u in ubic_guardadas):
+                            ubic_guardadas.append(pl)
+                for ub in UBICACIONES_BASE:
+                    if not any(ub.lower() == u.lower() for u in ubic_guardadas):
+                        ubic_guardadas.append(ub)
+            data["ubicaciones_guardadas"] = ubic_guardadas[:8]
+
+            ult_sel = data.get("ultimas_selecciones_inv", {})
+            if not isinstance(ult_sel, dict):
+                ult_sel = {}
+            if ult_sel.get("tipo") in ["A - Dólar Billete", "Dólar Billete", None, ""]:
+                ult_sel["tipo"] = "Dólares USD"
+            ult_sel.setdefault("accion", data["acciones_guardadas"][0] if data["acciones_guardadas"] else "AAPL (Apple)")
+            ult_sel.setdefault("cripto", data["criptos_guardadas"][0] if data["criptos_guardadas"] else "BTC (Bitcoin)")
+            ult_sel.setdefault("ubicacion", data["ubicaciones_guardadas"][0] if data["ubicaciones_guardadas"] else "Bco Nacion")
+            data["ultimas_selecciones_inv"] = ult_sel
+
             data.setdefault("historial_cierres", [])
             return data
         except Exception:
@@ -892,7 +1155,7 @@ def armar_dataframes_exportacion(datos, dolar_b, cotizaciones):
         cant = float(inv.get("cantidad", 0))
         tipo = inv.get("tipo", "Pesos ARS")
         simbolo = inv.get("simbolo", "").upper().strip()
-        if tipo == "Dólar Billete":
+        if tipo in ["Dólares USD", "Dólar Billete"]:
             val_usd = cant
             val_ars = cant * dolar_b
         elif tipo in ["Criptomonedas", "Acciones"]:
@@ -1631,6 +1894,16 @@ st.markdown("""
         white-space: nowrap !important;
     }
 
+    /* Campos bloqueados (solo lectura) en la tabla de Mis Activos */
+    div[data-testid="stTextInput"] input:disabled {
+        color: #1F2937 !important;
+        -webkit-text-fill-color: #1F2937 !important;
+        background-color: #F3F4F6 !important;
+        opacity: 1 !important;
+        font-weight: 500 !important;
+        cursor: default !important;
+    }
+
     @media (max-width: 768px) {
         .block-container {
             max-width: 100% !important;
@@ -1842,16 +2115,16 @@ if not st.session_state.autenticado:
 
 # ----------------- APP PRINCIPAL -----------------
 tickers_acc = [
-    inv.get("simbolo", "AAPL")
+    str(inv.get("simbolo", "AAPL")).split(" ")[0].upper().strip()
     for inv in datos.get("inversiones", [])
     if inv.get("tipo") == "Acciones"
-] + [a.split(" ")[0] for a in datos.get("acciones_guardadas", [])]
+]
 
 tickers_cri = [
-    inv.get("simbolo", "BTC")
+    str(inv.get("simbolo", "BTC")).split(" ")[0].upper().strip()
     for inv in datos.get("inversiones", [])
     if inv.get("tipo") == "Criptomonedas"
-] + datos.get("criptos_guardadas", [])
+]
 
 cotizaciones = obtener_cotizaciones(tuple(tickers_acc), tuple(tickers_cri))
 dolar_b = cotizaciones["dolar_blue"]
@@ -2640,11 +2913,21 @@ with pestana2:
 
     for inv in inversiones:
         cant = float(inv.get("cantidad", 0))
-        tipo = inv.get("tipo", "Pesos ARS")
-        simbolo = inv.get("simbolo", "").upper().strip()
+        tipo_raw = inv.get("tipo", "Pesos ARS")
+        tipo = "Dólares USD" if tipo_raw in ["Dólar Billete", "A - Dólar Billete", "Dólares USD"] else tipo_raw
+        activo_nom = inv.get("activo", tipo)
+        if activo_nom in ["Dólar Billete", "A - Dólar Billete"]:
+            activo_nom = "Dólares USD"
+
+        simbolo = str(inv.get("simbolo", "")).upper().strip().split(" ")[0]
+        if tipo in ["Criptomonedas", "Acciones"]:
+            det_t = str(activo_nom).strip().split(" ")[0].upper()
+            if det_t and det_t not in ["USD", "ARS"]:
+                simbolo = det_t
+
         esta_activo = inv.get("activo_inv", True)
 
-        if tipo == "Dólar Billete":
+        if tipo == "Dólares USD":
             val_usd = cant
             val_ars = cant * dolar_b
             cotiz_actual_str = f"1 USD = {dolar_b:,.0f} ARS"
@@ -2665,7 +2948,7 @@ with pestana2:
 
         filas.append({
             "Tipo": tipo,
-            "Activo": inv.get("activo", tipo),
+            "Activo": activo_nom,
             "Simbolo": simbolo,
             "Plataforma": inv.get("plataforma", ""),
             "Cantidad_Num": cant,
@@ -2705,36 +2988,118 @@ with pestana2:
             unsafe_allow_html=True
         )
         opciones_tipo = [
-            "A - Dólar Billete",
+            "Dólares USD",
             "B - Pesos ARS",
             "C - Acciones",
             "D - Criptomonedas",
             "E - Otros"
         ]
-        tipo_elegido = st.selectbox("1. Tipo de Activo", opciones_tipo)
+
+        ult_sel = datos.setdefault("ultimas_selecciones_inv", {
+            "tipo": "Dólares USD",
+            "accion": "AAPL (Apple)",
+            "cripto": "BTC (Bitcoin)",
+            "ubicacion": (datos.get("ubicaciones_guardadas") or ["Bco Nacion"])[0]
+        })
+
+        tipo_guardado = ult_sel.get("tipo", "Dólares USD")
+        if tipo_guardado not in opciones_tipo:
+            tipo_guardado = "Dólares USD"
+
+        if "_pending_inv_widget_sync" in st.session_state:
+            for k_sync, v_sync in st.session_state.pop("_pending_inv_widget_sync").items():
+                st.session_state[k_sync] = v_sync
+
+        if "inv_tipo_select" not in st.session_state or st.session_state["inv_tipo_select"] not in opciones_tipo:
+            st.session_state["inv_tipo_select"] = tipo_guardado
+
+        def on_cambio_tipo_inv():
+            datos.setdefault("ultimas_selecciones_inv", {})["tipo"] = st.session_state["inv_tipo_select"]
+            guardar_datos(datos)
+
+        tipo_elegido = st.selectbox(
+            "1. Tipo de Activo",
+            opciones_tipo,
+            key="inv_tipo_select",
+            on_change=on_cambio_tipo_inv
+        )
+
+        simbolo_elegido = "USD"
+        detalle_manual = ""
+
+        if tipo_elegido.startswith("C"):
+            lista_acc_actual = datos.get("acciones_guardadas", list(ACCIONES_100_BASE))
+            acc_recordada = ult_sel.get("accion", lista_acc_actual[0])
+            if acc_recordada not in lista_acc_actual:
+                coinc_acc = [a for a in lista_acc_actual if a.split(" ")[0].upper() == str(acc_recordada).split(" ")[0].upper()]
+                acc_recordada = coinc_acc[0] if coinc_acc else lista_acc_actual[0]
+
+            if "inv_accion_select" not in st.session_state or st.session_state["inv_accion_select"] not in lista_acc_actual:
+                st.session_state["inv_accion_select"] = acc_recordada
+
+            def on_cambio_accion_inv():
+                datos.setdefault("ultimas_selecciones_inv", {})["accion"] = st.session_state["inv_accion_select"]
+                guardar_datos(datos)
+
+            simbolo_elegido = st.selectbox(
+                "Seleccioná la Acción de la lista",
+                lista_acc_actual,
+                key="inv_accion_select",
+                on_change=on_cambio_accion_inv
+            )
+            detalle_manual = st.text_input(
+                "¿No está en la lista? Escribila a mano acá y quedará grabada (ej. DIS, V):",
+                key="inv_detalle_manual_acc"
+            )
+        elif tipo_elegido.startswith("D"):
+            lista_cri_actual = datos.get("criptos_guardadas", list(CRIPTOS_100_BASE))
+            cri_recordada = ult_sel.get("cripto", lista_cri_actual[0])
+            if cri_recordada not in lista_cri_actual:
+                coinc_cri = [c for c in lista_cri_actual if c.split(" ")[0].upper() == str(cri_recordada).split(" ")[0].upper()]
+                cri_recordada = coinc_cri[0] if coinc_cri else lista_cri_actual[0]
+
+            if "inv_cripto_select" not in st.session_state or st.session_state["inv_cripto_select"] not in lista_cri_actual:
+                st.session_state["inv_cripto_select"] = cri_recordada
+
+            def on_cambio_cripto_inv():
+                datos.setdefault("ultimas_selecciones_inv", {})["cripto"] = st.session_state["inv_cripto_select"]
+                guardar_datos(datos)
+
+            simbolo_elegido = st.selectbox(
+                "Seleccioná la Criptomoneda de la lista",
+                lista_cri_actual,
+                key="inv_cripto_select",
+                on_change=on_cambio_cripto_inv
+            )
+            detalle_manual = st.text_input(
+                "¿No está en la lista? Escribí la sigla a mano acá y quedará grabada (ej. DFT, ADA):",
+                key="inv_detalle_manual_cri"
+            )
+        elif tipo_elegido.startswith("E"):
+            detalle_manual = st.text_input(
+                "Detalle qué es (ej. FRASCO NX, FCI, PF UVA)",
+                key="inv_detalle_manual_otros"
+            )
+
+        if "inv_ubicacion_input" not in st.session_state:
+            st.session_state["inv_ubicacion_input"] = ult_sel.get(
+                "ubicacion",
+                (datos.get("ubicaciones_guardadas") or ["Bco Nacion"])[0]
+            )
+
+        def on_enter_ubicacion_inv():
+            val_u = st.session_state.get("inv_ubicacion_input", "").strip()
+            if val_u:
+                registrar_ubicacion_guardada(datos, val_u)
+                guardar_datos(datos)
+
+        plat_act = st.text_input(
+            "2. Ubicación, ¿dónde está?",
+            key="inv_ubicacion_input",
+            on_change=on_enter_ubicacion_inv
+        )
 
         with st.form("form_guardar_activo_inv", clear_on_submit=True):
-            simbolo_elegido = "USD"
-            detalle_manual = ""
-
-            if tipo_elegido.startswith("C"):
-                lista_acc_actual = datos.get("acciones_guardadas", [])
-                simbolo_elegido = st.selectbox("Seleccioná la Acción de la lista", lista_acc_actual)
-                detalle_manual = st.text_input(
-                    "¿No está en la lista? Escribila a mano acá y quedará grabada (ej. DIS, V):"
-                )
-            elif tipo_elegido.startswith("D"):
-                lista_cri_actual = datos.get("criptos_guardadas", [])
-                simbolo_elegido = st.selectbox("Seleccioná la Criptomoneda de la lista", lista_cri_actual)
-                detalle_manual = st.text_input(
-                    "¿No está en la lista? Escribí la sigla a mano acá y quedará grabada (ej. DFT, ADA):"
-                )
-            elif tipo_elegido.startswith("E"):
-                detalle_manual = st.text_input(
-                    "Detalle qué es (ej. FRASCO NX, FCI, PF UVA)"
-                )
-
-            plat_act = st.text_input("2. Ubicación, ¿dónde está?")
             cant_texto = st.text_input(
                 "3. Cantidad que tenés",
                 placeholder="Ej: 40000 o 0.5"
@@ -2752,9 +3117,9 @@ with pestana2:
                     cant_num = -1.0
 
                 if cant_num > 0:
-                    if tipo_elegido.startswith("A"):
-                        tipo_guardar = "Dólar Billete"
-                        nombre_act = "Dólar Billete"
+                    if tipo_elegido == "Dólares USD" or tipo_elegido.startswith("A"):
+                        tipo_guardar = "Dólares USD"
+                        nombre_act = "Dólares USD"
                         simbolo_final = "USD"
                     elif tipo_elegido.startswith("B"):
                         tipo_guardar = "Pesos ARS"
@@ -2768,31 +3133,57 @@ with pestana2:
                                 datos["acciones_guardadas"].append(nuevo_acc)
                             nombre_act = nuevo_acc
                             simbolo_final = nuevo_acc.split(" ")[0]
+                            st.session_state["_pending_inv_widget_sync"] = {
+                                "inv_accion_select": nuevo_acc,
+                                "inv_detalle_manual_acc": ""
+                            }
                         else:
                             nombre_act = simbolo_elegido
                             simbolo_final = simbolo_elegido.split(" ")[0].upper()
+                        datos.setdefault("ultimas_selecciones_inv", {})["accion"] = nombre_act
                     elif tipo_elegido.startswith("D"):
                         tipo_guardar = "Criptomonedas"
                         if detalle_manual.strip():
-                            nueva_cri = detalle_manual.strip().upper().split(" ")[0]
-                            if nueva_cri not in datos["criptos_guardadas"]:
-                                datos["criptos_guardadas"].append(nueva_cri)
-                            nombre_act = nueva_cri
-                            simbolo_final = nueva_cri
+                            nueva_cri_raw = detalle_manual.strip().upper()
+                            nueva_cri_sim = nueva_cri_raw.split(" ")[0]
+                            coinc_c = [c for c in datos["criptos_guardadas"] if c.split(" ")[0].upper() == nueva_cri_sim]
+                            if coinc_c:
+                                item_lista_cri = coinc_c[0]
+                            else:
+                                item_lista_cri = nueva_cri_raw
+                                datos["criptos_guardadas"].append(item_lista_cri)
+                            nombre_act = nueva_cri_sim
+                            simbolo_final = nueva_cri_sim
+                            st.session_state["_pending_inv_widget_sync"] = {
+                                "inv_cripto_select": item_lista_cri,
+                                "inv_detalle_manual_cri": ""
+                            }
                         else:
-                            nombre_act = simbolo_elegido.strip().upper()
-                            simbolo_final = nombre_act
+                            item_lista_cri = simbolo_elegido
+                            simbolo_final = simbolo_elegido.split(" ")[0].upper().strip()
+                            nombre_act = simbolo_final
+                        datos.setdefault("ultimas_selecciones_inv", {})["cripto"] = item_lista_cri
                     else:
                         tipo_guardar = "Otros"
                         nombre_act = detalle_manual.strip() if detalle_manual.strip() else "Otros"
                         simbolo_final = "ARS"
+                        if detalle_manual.strip():
+                            st.session_state["_pending_inv_widget_sync"] = {
+                                "inv_detalle_manual_otros": ""
+                            }
+
+                    ubicacion_final = plat_act.strip() if plat_act.strip() else "Sin especificar"
+                    if plat_act.strip():
+                        registrar_ubicacion_guardada(datos, plat_act.strip())
+
+                    datos.setdefault("ultimas_selecciones_inv", {})["tipo"] = tipo_elegido
 
                     datos["inversiones"].append({
                         "tipo": tipo_guardar,
                         "activo": nombre_act,
                         "simbolo": simbolo_final,
                         "cantidad": int(cant_num) if cant_num.is_integer() else cant_num,
-                        "plataforma": plat_act.strip() if plat_act.strip() else "Sin especificar",
+                        "plataforma": ubicacion_final,
                         "activo_inv": True
                     })
                     guardar_datos(datos)
@@ -2808,7 +3199,7 @@ with pestana2:
             unsafe_allow_html=True
         )
         orden_categorias_inv = [
-            "Dólar Billete",
+            "Dólares USD",
             "Pesos ARS",
             "Acciones",
             "Criptomonedas",
@@ -2820,7 +3211,7 @@ with pestana2:
             for cat_inv in orden_categorias_inv:
                 items_cat_inv = [
                     (idx, inv) for idx, inv in enumerate(inversiones)
-                    if inv.get("tipo", "Otros") == cat_inv
+                    if ("Dólares USD" if inv.get("tipo") in ["Dólar Billete", "A - Dólar Billete", "Dólares USD"] else inv.get("tipo", "Otros")) == cat_inv
                 ]
                 if not items_cat_inv:
                     continue
@@ -2864,45 +3255,33 @@ with pestana2:
                                 inv_cambios = True
 
                         with c_nom:
-                            nuevo_nom_inv = st.text_input(
+                            val_detalle_mostrar = "Dólares USD" if inv.get("activo", "") in ["Dólar Billete", "A - Dólar Billete"] else inv.get("activo", "")
+                            st.text_input(
                                 "Detalle",
-                                value=inv.get("activo", ""),
+                                value=val_detalle_mostrar,
                                 key=f"inv_nom_{idx}",
                                 label_visibility="collapsed",
-                                disabled=not st_act
+                                disabled=True
                             )
-                            if nuevo_nom_inv != inv.get("activo", ""):
-                                inv["activo"] = nuevo_nom_inv
-                                inv_cambios = True
 
                         with c_cant:
                             cant_str_actual = formatear_cant(inv.get("cantidad", 0)).replace(",", "")
-                            nueva_c_str = st.text_input(
+                            st.text_input(
                                 "Cantidad",
                                 value=cant_str_actual,
                                 key=f"inv_cant_{idx}",
                                 label_visibility="collapsed",
-                                disabled=not st_act
+                                disabled=True
                             )
-                            try:
-                                nueva_c_num = float(nueva_c_str.replace(",", "."))
-                                if nueva_c_num != float(inv.get("cantidad", 0)):
-                                    inv["cantidad"] = int(nueva_c_num) if nueva_c_num.is_integer() else nueva_c_num
-                                    inv_cambios = True
-                            except ValueError:
-                                pass
 
                         with c_plat:
-                            nueva_p = st.text_input(
+                            st.text_input(
                                 "Ubicación",
                                 value=inv.get("plataforma", ""),
                                 key=f"inv_p_{idx}",
                                 label_visibility="collapsed",
-                                disabled=not st_act
+                                disabled=True
                             )
-                            if nueva_p != inv.get("plataforma", ""):
-                                inv["plataforma"] = nueva_p
-                                inv_cambios = True
 
                         with c_del:
                             if st.button("🗑️", key=f"inv_del_{idx}", help="Eliminar este activo"):
@@ -2919,7 +3298,7 @@ with pestana2:
     st.markdown("---")
 
     st.markdown(
-        "<h3 style='color: #5B4B8A;'>📊 Distribución y Cotizaciones en Vivo</h3>",
+        "<h3 style='color: #5B4B8A;'>📊 DISTRIBUCIÓN DE MI PATRIMONIO</h3>",
         unsafe_allow_html=True
     )
     if not df_inv_activos.empty and total_patrimonio_ars > 0:
@@ -2927,7 +3306,7 @@ with pestana2:
 
         with col_g_inv1:
             st.markdown(
-                "<h4 style='color: #5B4B8A; text-align: center;'>Subtotales por Categoría de Activo</h4>",
+                "<h4 style='color: #5B4B8A; text-align: center;'>Según tipo de Activo</h4>",
                 unsafe_allow_html=True
             )
             resumen_tipo = df_inv_activos.groupby("Tipo", as_index=False).agg({
@@ -2948,7 +3327,7 @@ with pestana2:
 
         with col_g_inv2:
             st.markdown(
-                "<h4 style='color: #5B4B8A; text-align: center;'>Por Activo Individual y Ubicación</h4>",
+                "<h4 style='color: #5B4B8A; text-align: center;'>Según Ubicación</h4>",
                 unsafe_allow_html=True
             )
             df_det = df_inv_activos.sort_values(by="Valor en ARS", ascending=False).copy()
@@ -2958,11 +3337,40 @@ with pestana2:
             fig_inv_det = crear_torta_2d(df_det, "Valor en ARS", "Etiqueta")
             st.plotly_chart(fig_inv_det, use_container_width=True, config={"displayModeBar": False})
 
+            # Filtro por Activo o por Ubicación / Plataforma y cálculo de subtotales
+            activos_unicos = list(dict.fromkeys(df_det["Activo"].dropna().astype(str).tolist()))
+            ubicaciones_unicas = list(dict.fromkeys(df_det["Plataforma"].dropna().astype(str).tolist()))
+            opciones_filtro = ["Todos (ver todo)"]
+            for a_item in activos_unicos:
+                if a_item and a_item not in opciones_filtro:
+                    opciones_filtro.append(a_item)
+            for u_item in ubicaciones_unicas:
+                if u_item and u_item not in opciones_filtro:
+                    opciones_filtro.append(u_item)
+
+            filtro_sel = st.selectbox(
+                "🔎 Filtrar por Activo o Ubicación (ej. BTC, NEXO, Binance):",
+                options=opciones_filtro,
+                key="filtro_tabla_final_inv"
+            )
+
+            if filtro_sel != "Todos (ver todo)":
+                f_low = filtro_sel.strip().lower()
+                mask_f = (
+                    (df_det["Activo"].astype(str).str.lower() == f_low)
+                    | (df_det["Simbolo"].astype(str).str.lower() == f_low)
+                    | (df_det["Plataforma"].astype(str).str.lower() == f_low)
+                    | (df_det["Tipo"].astype(str).str.lower() == f_low)
+                )
+                df_det_mostrar = df_det[mask_f].copy()
+            else:
+                df_det_mostrar = df_det.copy()
+
             cols_d = [
                 "Tipo", "Activo", "Plataforma", "Cantidad",
                 "Cotización Actual", "Valor en ARS", "Valor en USD", "%"
             ]
-            tabla_d = df_det[cols_d].copy()
+            tabla_d = df_det_mostrar[cols_d].copy()
             tabla_d.columns = [
                 "Categoría", "Activo", "Ubicación", "Cantidad",
                 "Cotización Actual Tomada", "Valor en ARS", "Valor en USD", "%"
@@ -2970,6 +3378,40 @@ with pestana2:
             tabla_d["Valor en ARS"] = tabla_d["Valor en ARS"].apply(lambda x: f"{x:,.0f} ARS")
             tabla_d["Valor en USD"] = tabla_d["Valor en USD"].apply(lambda x: f"{x:,.2f} USD")
             tabla_d["%"] = tabla_d["%"].apply(lambda x: f"{x:.1f}%")
+
+            if filtro_sel != "Todos (ver todo)" and not df_det_mostrar.empty:
+                sub_f_ars = df_det_mostrar["Valor en ARS"].sum()
+                sub_f_usd = df_det_mostrar["Valor en USD"].sum()
+                sub_f_pct = (sub_f_ars / total_patrimonio_ars) * 100 if total_patrimonio_ars > 0 else 0.0
+                cant_f_total = df_det_mostrar["Cantidad_Num"].sum()
+                es_mismo_activo = df_det_mostrar["Activo"].nunique() == 1
+                cant_f_str = formatear_cant(cant_f_total) if es_mismo_activo else f"{len(df_det_mostrar)} ítems"
+
+                fila_subtotal = pd.DataFrame([{
+                    "Categoría": "SUBTOTAL",
+                    "Activo": filtro_sel,
+                    "Ubicación": "Total filtrado",
+                    "Cantidad": cant_f_str,
+                    "Cotización Actual Tomada": "—",
+                    "Valor en ARS": f"{sub_f_ars:,.0f} ARS",
+                    "Valor en USD": f"{sub_f_usd:,.2f} USD",
+                    "%": f"{sub_f_pct:.1f}%"
+                }])
+                tabla_d = pd.concat([tabla_d, fila_subtotal], ignore_index=True)
+
+                st.markdown(f"""
+                <div style="background-color: #F3E8FF; border: 1.5px solid #C084FC; border-left: 6px solid #7E22CE;
+                            border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; color: #4A235A; font-size: 0.98rem;">
+                    <b>Subtotal ({filtro_sel}):</b> <b>{sub_f_usd:,.2f} USD</b> &nbsp;|&nbsp;
+                    <b>{sub_f_ars:,.0f} ARS</b> &nbsp;|&nbsp;
+                    <b>{sub_f_pct:.1f}%</b> del patrimonio total
+                </div>
+                """, unsafe_allow_html=True)
+
             st.dataframe(tabla_d, use_container_width=True, hide_index=True)
 
-activar_interactividad_avanzada(datos.get('categorias_costos', []), datos.get('categorias_ingresos', []))
+activar_interactividad_avanzada(
+    datos.get('categorias_costos', []),
+    datos.get('categorias_ingresos', []),
+    datos.get('ubicaciones_guardadas', [])
+)
