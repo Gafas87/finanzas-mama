@@ -3027,7 +3027,7 @@ with pestana2:
         simbolo_elegido = "USD"
         detalle_manual = ""
 
-        if tipo_elegido.startswith("C"):
+        if tipo_elegido == "C - Acciones":
             lista_acc_actual = datos.get("acciones_guardadas", list(ACCIONES_100_BASE))
             acc_recordada = ult_sel.get("accion", lista_acc_actual[0])
             if acc_recordada not in lista_acc_actual:
@@ -3051,7 +3051,7 @@ with pestana2:
                 "¿No está en la lista? Escribila a mano acá y quedará grabada (ej. DIS, V):",
                 key="inv_detalle_manual_acc"
             )
-        elif tipo_elegido.startswith("D"):
+        elif tipo_elegido == "D - Criptomonedas":
             lista_cri_actual = datos.get("criptos_guardadas", list(CRIPTOS_100_BASE))
             cri_recordada = ult_sel.get("cripto", lista_cri_actual[0])
             if cri_recordada not in lista_cri_actual:
@@ -3075,7 +3075,7 @@ with pestana2:
                 "¿No está en la lista? Escribí la sigla a mano acá y quedará grabada (ej. DFT, ADA):",
                 key="inv_detalle_manual_cri"
             )
-        elif tipo_elegido.startswith("E"):
+        elif tipo_elegido == "E - Otros":
             detalle_manual = st.text_input(
                 "Detalle qué es (ej. FRASCO NX, FCI, PF UVA)",
                 key="inv_detalle_manual_otros"
@@ -3117,15 +3117,15 @@ with pestana2:
                     cant_num = -1.0
 
                 if cant_num > 0:
-                    if tipo_elegido == "Dólares USD" or tipo_elegido.startswith("A"):
+                    if tipo_elegido == "Dólares USD":
                         tipo_guardar = "Dólares USD"
                         nombre_act = "Dólares USD"
                         simbolo_final = "USD"
-                    elif tipo_elegido.startswith("B"):
+                    elif tipo_elegido == "B - Pesos ARS":
                         tipo_guardar = "Pesos ARS"
                         nombre_act = "Pesos ARS"
                         simbolo_final = "ARS"
-                    elif tipo_elegido.startswith("C"):
+                    elif tipo_elegido == "C - Acciones":
                         tipo_guardar = "Acciones"
                         if detalle_manual.strip():
                             nuevo_acc = detalle_manual.strip().upper()
@@ -3141,7 +3141,7 @@ with pestana2:
                             nombre_act = simbolo_elegido
                             simbolo_final = simbolo_elegido.split(" ")[0].upper()
                         datos.setdefault("ultimas_selecciones_inv", {})["accion"] = nombre_act
-                    elif tipo_elegido.startswith("D"):
+                    elif tipo_elegido == "D - Criptomonedas":
                         tipo_guardar = "Criptomonedas"
                         if detalle_manual.strip():
                             nueva_cri_raw = detalle_manual.strip().upper()
@@ -3298,7 +3298,7 @@ with pestana2:
     st.markdown("---")
 
     st.markdown(
-        "<h3 style='color: #5B4B8A;'>📊 DISTRIBUCIÓN DE MI PATRIMONIO</h3>",
+        "<h3 style='color: #5B4B8A;'>💼 Distribución de mi Patrimonio</h3>",
         unsafe_allow_html=True
     )
     if not df_inv_activos.empty and total_patrimonio_ars > 0:
@@ -3331,10 +3331,41 @@ with pestana2:
                 unsafe_allow_html=True
             )
             df_det = df_inv_activos.sort_values(by="Valor en ARS", ascending=False).copy()
-            df_det["Etiqueta"] = df_det["Activo"] + " (" + df_det["Plataforma"] + ")"
             df_det["%"] = (df_det["Valor en ARS"] / total_patrimonio_ars) * 100
 
-            fig_inv_det = crear_torta_2d(df_det, "Valor en ARS", "Etiqueta")
+            # Agrupar por Ubicación (una sola porción por plataforma/ubicación sumando todos sus activos)
+            df_ubic_grp = df_inv_activos.copy()
+            df_ubic_grp["Ubicacion_Limpia"] = df_ubic_grp["Plataforma"].astype(str).str.strip()
+            df_ubic_grp.loc[df_ubic_grp["Ubicacion_Limpia"] == "", "Ubicacion_Limpia"] = "Sin especificar"
+
+            mapa_ubic_display = {}
+            for u_raw in df_ubic_grp["Ubicacion_Limpia"]:
+                u_key = u_raw.lower()
+                if u_key not in mapa_ubic_display or (u_raw != u_raw.upper() and mapa_ubic_display[u_key] == mapa_ubic_display[u_key].upper()):
+                    mapa_ubic_display[u_key] = u_raw
+            df_ubic_grp["Ubicacion_Final"] = df_ubic_grp["Ubicacion_Limpia"].apply(lambda x: mapa_ubic_display.get(x.lower(), x))
+
+            resumen_ubic = df_ubic_grp.groupby("Ubicacion_Final", as_index=False).agg({
+                "Valor en ARS": "sum",
+                "Valor en USD": "sum"
+            }).sort_values(by="Valor en ARS", ascending=False)
+            resumen_ubic["%"] = (resumen_ubic["Valor en ARS"] / total_patrimonio_ars) * 100
+
+            # Agrupar porciones menores al 2% en "Otras" cuando hay más de una para evitar superposición de etiquetas
+            menores_2pct = resumen_ubic[resumen_ubic["%"] < 2.0]
+            if len(menores_2pct) > 1:
+                mayores_2pct = resumen_ubic[resumen_ubic["%"] >= 2.0].copy()
+                fila_otras = pd.DataFrame([{
+                    "Ubicacion_Final": "Otras",
+                    "Valor en ARS": menores_2pct["Valor en ARS"].sum(),
+                    "Valor en USD": menores_2pct["Valor en USD"].sum(),
+                    "%": menores_2pct["%"].sum()
+                }])
+                df_pie_ubic = pd.concat([mayores_2pct, fila_otras], ignore_index=True)
+            else:
+                df_pie_ubic = resumen_ubic.copy()
+
+            fig_inv_det = crear_torta_2d(df_pie_ubic, "Valor en ARS", "Ubicacion_Final")
             st.plotly_chart(fig_inv_det, use_container_width=True, config={"displayModeBar": False})
 
             # Filtro por Activo o por Ubicación / Plataforma y cálculo de subtotales
