@@ -40,9 +40,17 @@ PALETA_PASTEL = [
 ]
 
 ICONOS_DISPONIBLES = [
+    # 28 existentes conservados
     "🧾", "💡", "🚗", "👗", "🏠", "🛒", "🩺", "🏊‍♀️", "🧘‍♀️", "✈️",
     "📺", "🐾", "📚", "🎁", "💳", "💼", "💵", "👵", "📈", "📁",
-    "🌿", "💎", "🛠️", "🧹", "🍽️", "📱", "⛽", "📌"
+    "🌿", "💎", "🛠️", "🧹", "🍽️", "📱", "⛽", "📌",
+    # Nuevos íconos (vivienda, transporte, comida, servicios, salud, educación, ocio, inversiones, ahorros, sueldo, impuestos, deudas, regalos, mascotas)
+    "🔨", "🧰", "🖌️", "🌱", "🐜", "🚚", "🔑", "🛋️", "🛏️", "🖼️",
+    "🧺", "🚨", "🚿", "❄️", "🌡️", "☀️", "🍎", "🥩", "🥖", "☕",
+    "🧴", "🫧", "👕", "🧻", "🧽", "🪥", "🧼", "🌸", "🚆", "🚕",
+    "🏍️", "🛡️", "📋", "🔧", "🛞", "🅿️", "🏥", "🦷", "💊", "🧪",
+    "🩻", "👓", "🦵", "🧠", "🥗", "🧥", "🕶️", "⌚", "🪡", "🎒",
+    "💍", "💰", "🏦", "🪙", "📊", "🎓", "🎭", "🐶", "🐱"
 ]
 
 
@@ -255,7 +263,7 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                 }
             });
 
-            // Ajustar únicamente los botones ▲ y ▼ y su columna inmediata (sin tocar ningún contenedor padre de la página)
+            // Ajustar únicamente los botones ▲ y ▼ y estilizar el botón de eliminar categoría vacía
             const botones = Array.from(doc.querySelectorAll('button'));
             botones.forEach(btn => {
                 const t = (btn.innerText || btn.textContent || '').trim();
@@ -277,12 +285,58 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None):
                         ch.style.setProperty('padding', '0px', 'important');
                     });
                     const col = btn.closest('[data-testid="stColumn"]');
-                    if (col) {
+                    if (col && !col.querySelector('[data-testid="stColumn"]')) {
                         const innerVb = col.querySelector('[data-testid="stVerticalBlock"]');
                         if (innerVb) {
                             innerVb.style.setProperty('gap', '2px', 'important');
                         }
                     }
+                } else if (t === '+') {
+                    btn.classList.add('btn-mas-trebol');
+                    btn.setAttribute('title', 'Agregar categoría');
+                    btn.style.setProperty('background', '#57CC99', 'important');
+                    btn.style.setProperty('background-color', '#57CC99', 'important');
+                    btn.style.setProperty('border', '1.5px solid #38A3A5', 'important');
+                    btn.style.setProperty('color', '#FFFFFF', 'important');
+                    btn.style.setProperty('width', '38px', 'important');
+                    btn.style.setProperty('min-width', '38px', 'important');
+                    btn.style.setProperty('max-width', '38px', 'important');
+                    btn.style.setProperty('height', '38px', 'important');
+                    btn.style.setProperty('min-height', '38px', 'important');
+                    btn.style.setProperty('padding', '0px', 'important');
+                    btn.style.setProperty('border-radius', '10px', 'important');
+                    btn.style.setProperty('display', 'inline-flex', 'important');
+                    btn.style.setProperty('align-items', 'center', 'important');
+                    btn.style.setProperty('justify-content', 'center', 'important');
+                    btn.querySelectorAll('p, span, div').forEach(ch => {
+                        ch.style.setProperty('color', '#FFFFFF', 'important');
+                        ch.style.setProperty('font-size', '1.35rem', 'important');
+                        ch.style.setProperty('font-weight', '800', 'important');
+                        ch.style.setProperty('line-height', '1', 'important');
+                        ch.style.setProperty('margin', '0px', 'important');
+                        ch.style.setProperty('padding', '0px', 'important');
+                    });
+                } else if (t === '🗑️' && (btn.getAttribute('title') === 'Eliminar categoría' || btn.closest('.contenedor-del-cat-vacia'))) {
+                    btn.classList.add('btn-eliminar-cat-vacia');
+                    btn.setAttribute('title', 'Eliminar categoría');
+                    btn.style.setProperty('display', 'inline-flex', 'important');
+                    btn.style.setProperty('align-items', 'center', 'important');
+                    btn.style.setProperty('justify-content', 'center', 'important');
+                    btn.style.setProperty('width', '46px', 'important');
+                    btn.style.setProperty('min-width', '46px', 'important');
+                    btn.style.setProperty('max-width', '46px', 'important');
+                    btn.style.setProperty('height', '44px', 'important');
+                    btn.style.setProperty('min-height', '44px', 'important');
+                    btn.style.setProperty('padding', '0px', 'important');
+                    btn.style.setProperty('border-radius', '10px', 'important');
+                    btn.style.setProperty('background-color', '#FFF5F5', 'important');
+                    btn.style.setProperty('border', '1.5px solid #F5B7B1', 'important');
+                    btn.querySelectorAll('p, span, div').forEach(ch => {
+                        ch.style.setProperty('font-size', '1.5rem', 'important');
+                        ch.style.setProperty('line-height', '1', 'important');
+                        ch.style.setProperty('margin', '0px', 'important');
+                        ch.style.setProperty('padding', '0px', 'important');
+                    });
                 }
             });
         }
@@ -1243,6 +1297,42 @@ st.markdown("""
         color: #FFFFFF !important;
         font-weight: 700 !important;
     }
+    /* Botón (+) compacto en verde trébol claro con signo (+) blanco y ancho mínimo dentro de categorías */
+    details div[data-testid="stForm"] div[data-testid="stFormSubmitButton"] button,
+    button.btn-mas-trebol {
+        background: #57CC99 !important;
+        background-color: #57CC99 !important;
+        border: 1.5px solid #38A3A5 !important;
+        color: #FFFFFF !important;
+        width: 38px !important;
+        min-width: 38px !important;
+        max-width: 38px !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        padding: 0px !important;
+        border-radius: 10px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 2px 6px rgba(87, 204, 153, 0.25) !important;
+    }
+    details div[data-testid="stForm"] div[data-testid="stFormSubmitButton"] button:hover,
+    button.btn-mas-trebol:hover {
+        background: #48B886 !important;
+        background-color: #48B886 !important;
+        border-color: #2D6A4F !important;
+    }
+    details div[data-testid="stForm"] div[data-testid="stFormSubmitButton"] button p,
+    details div[data-testid="stForm"] div[data-testid="stFormSubmitButton"] button span,
+    button.btn-mas-trebol p,
+    button.btn-mas-trebol span {
+        color: #FFFFFF !important;
+        font-size: 1.35rem !important;
+        font-weight: 800 !important;
+        line-height: 1 !important;
+        margin: 0px !important;
+        padding: 0px !important;
+    }
 
     /* 4. CAMBIO 1: Solapas principales en forma de píldora verde menta con 🍀 (visibles y sin recortes) */
     .stTabs {
@@ -1393,15 +1483,15 @@ st.markdown("""
         font-weight: 800 !important;
     }
 
-    /* 6. Botones apilados ▲ y ▼ exclusivamente (sin afectar ningún otro contenedor ni botón) */
+    /* 6. Botones apilados ▲ y ▼ exclusivamente en la columna hija de flechas (sin afectar la columna principal) */
     div[data-testid="stElementContainer"]:has(> div > .flechas-cat-stack) {
         display: none !important;
     }
-    div[data-testid="stColumn"]:has(.flechas-cat-stack) > div > div[data-testid="stVerticalBlock"] {
+    div[data-testid="stColumn"]:not(:has([data-testid="stColumn"])):has(.flechas-cat-stack) > div > div[data-testid="stVerticalBlock"] {
         gap: 2px !important;
     }
     button.btn-flecha-cat,
-    div[data-testid="stColumn"]:has(.flechas-cat-stack) div[data-testid="stButton"] button {
+    div[data-testid="stColumn"]:not(:has([data-testid="stColumn"])):has(.flechas-cat-stack) div[data-testid="stButton"] button {
         height: 21px !important;
         min-height: 21px !important;
         max-height: 21px !important;
@@ -1413,8 +1503,46 @@ st.markdown("""
         line-height: 1 !important;
     }
     button.btn-flecha-cat p,
-    div[data-testid="stColumn"]:has(.flechas-cat-stack) div[data-testid="stButton"] button p {
+    div[data-testid="stColumn"]:not(:has([data-testid="stColumn"])):has(.flechas-cat-stack) div[data-testid="stButton"] button p {
         font-size: 0.68rem !important;
+        line-height: 1 !important;
+        margin: 0px !important;
+        padding: 0px !important;
+    }
+
+    /* 6b. Botón de eliminar categoría vacía: solo ícono 🗑️ a tamaño 1.5x con tooltip */
+    div[data-testid="stElementContainer"]:has(> div > .hook-del-cat-vacia) {
+        display: none !important;
+    }
+    button.btn-eliminar-cat-vacia,
+    div[data-testid="stElementContainer"]:has(> div > .hook-del-cat-vacia) + div[data-testid="stElementContainer"] div[data-testid="stButton"] button {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 46px !important;
+        min-width: 46px !important;
+        max-width: 46px !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        padding: 0px !important;
+        border-radius: 10px !important;
+        background-color: #FFF5F5 !important;
+        border: 1.5px solid #F5B7B1 !important;
+        box-shadow: 0 2px 5px rgba(224, 122, 95, 0.08) !important;
+        transition: all 0.2s ease-in-out !important;
+    }
+    button.btn-eliminar-cat-vacia:hover,
+    div[data-testid="stElementContainer"]:has(> div > .hook-del-cat-vacia) + div[data-testid="stElementContainer"] div[data-testid="stButton"] button:hover {
+        background-color: #FADBD8 !important;
+        border-color: #E07A5F !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 10px rgba(192, 57, 43, 0.14) !important;
+    }
+    button.btn-eliminar-cat-vacia p,
+    button.btn-eliminar-cat-vacia span,
+    div[data-testid="stElementContainer"]:has(> div > .hook-del-cat-vacia) + div[data-testid="stElementContainer"] div[data-testid="stButton"] button p,
+    div[data-testid="stElementContainer"]:has(> div > .hook-del-cat-vacia) + div[data-testid="stElementContainer"] div[data-testid="stButton"] button span {
+        font-size: 1.5rem !important;
         line-height: 1 !important;
         margin: 0px !important;
         padding: 0px !important;
@@ -2074,7 +2202,7 @@ with pestana1:
         st.markdown("<div class='hook-agregar-costo' style='display:none;'></div>", unsafe_allow_html=True)
 
         with st.expander("➕ AGREGAR NUEVA CATEGORÍA DE COSTOS"):
-            c_nc1, c_nc2 = st.columns([2.8, 1.2])
+            c_nc1, c_nc2 = st.columns([3.6, 0.45])
             with c_nc1:
                 st.text_input(
                     "Nombre de la Categoría (ej. IMPUESTOS, AUTO, SALUD)",
@@ -2084,7 +2212,7 @@ with pestana1:
                 )
             with c_nc2:
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                if st.button("➕ Crear Categoría", key="btn_crear_cat_c", use_container_width=True):
+                if st.button("+", key="btn_crear_cat_c", help="Agregar categoría"):
                     crear_categoria_costo_auto()
                     st.rerun()
 
@@ -2200,7 +2328,7 @@ with pestana1:
                             st.rerun()
 
                 with st.form(f"form_sub_costo_{cat_nombre}", clear_on_submit=True):
-                    sc1, sc2, sc3 = st.columns([2.2, 1.35, 1.05])
+                    sc1, sc2, sc3 = st.columns([2.55, 1.55, 0.5])
                     with sc1:
                         sub_nom_c = st.text_input(
                             "Nueva subcategoría",
@@ -2214,7 +2342,7 @@ with pestana1:
                             label_visibility="collapsed"
                         )
                     with sc3:
-                        btn_sub_c = st.form_submit_button("➕ Agregar", use_container_width=True)
+                        btn_sub_c = st.form_submit_button("+", help="Agregar categoría")
                         if btn_sub_c and sub_nom_c.strip():
                             try:
                                 m_num = float(sub_val_c.strip().replace(",", ".")) if sub_val_c.strip() else 0
@@ -2230,7 +2358,12 @@ with pestana1:
                             st.rerun()
 
                 if not items_cat:
-                    if st.button(f"🗑️ Eliminar categoría vacía '{cat_nombre}'", key=f"del_cat_c_{cat_nombre}"):
+                    st.markdown("<div class='hook-del-cat-vacia'></div>", unsafe_allow_html=True)
+                    if st.button(
+                        "🗑️",
+                        key=f"del_cat_c_{cat_nombre}",
+                        help="Eliminar categoría"
+                    ):
                         datos["categorias_costos"].remove(cat_nombre)
                         guardar_datos(datos)
                         st.rerun()
@@ -2245,7 +2378,7 @@ with pestana1:
         st.markdown("<div class='hook-agregar-ingreso' style='display:none;'></div>", unsafe_allow_html=True)
 
         with st.expander("➕ AGREGAR NUEVA CATEGORÍA DE INGRESOS"):
-            c_ni1, c_ni2 = st.columns([2.8, 1.2])
+            c_ni1, c_ni2 = st.columns([3.6, 0.45])
             with c_ni1:
                 st.text_input(
                     "Nombre de la Categoría (ej. Trabajo, Consultorio, Otros)",
@@ -2255,7 +2388,7 @@ with pestana1:
                 )
             with c_ni2:
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                if st.button("➕ Crear Categoría", key="btn_crear_cat_i", use_container_width=True):
+                if st.button("+", key="btn_crear_cat_i", help="Agregar categoría"):
                     crear_categoria_ingreso_auto()
                     st.rerun()
 
@@ -2371,7 +2504,7 @@ with pestana1:
                             st.rerun()
 
                 with st.form(f"form_sub_ing_{cat_nombre_i}", clear_on_submit=True):
-                    si1, si2, si3 = st.columns([2.2, 1.35, 1.05])
+                    si1, si2, si3 = st.columns([2.55, 1.55, 0.5])
                     with si1:
                         sub_nom_i = st.text_input(
                             "Nuevo ingreso",
@@ -2385,7 +2518,7 @@ with pestana1:
                             label_visibility="collapsed"
                         )
                     with si3:
-                        btn_sub_i = st.form_submit_button("➕ Agregar", use_container_width=True)
+                        btn_sub_i = st.form_submit_button("+", help="Agregar categoría")
                         if btn_sub_i and sub_nom_i.strip():
                             try:
                                 mi_num = float(sub_val_i.strip().replace(",", ".")) if sub_val_i.strip() else 0
@@ -2401,7 +2534,12 @@ with pestana1:
                             st.rerun()
 
                 if not items_cat_i:
-                    if st.button(f"🗑️ Eliminar categoría vacía '{cat_nombre_i}'", key=f"del_cat_i_{cat_nombre_i}"):
+                    st.markdown("<div class='hook-del-cat-vacia'></div>", unsafe_allow_html=True)
+                    if st.button(
+                        "🗑️",
+                        key=f"del_cat_i_{cat_nombre_i}",
+                        help="Eliminar categoría"
+                    ):
                         datos["categorias_ingresos"].remove(cat_nombre_i)
                         guardar_datos(datos)
                         st.rerun()
