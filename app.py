@@ -611,6 +611,575 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None, ubicac
     components.html(js_code.replace("__UBICACIONES_JSON__", ubicaciones_json), height=0, width=0)
 
 
+
+
+# ----------------- PANEL DINÁMICO 3D DE SALUD FINANCIERA Y RUNWAY -----------------
+def _hex_to_rgb(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
+
+def _rgb_to_hex(rgb):
+    return "#{:02x}{:02x}{:02x}".format(
+        max(0, min(255, int(round(rgb[0])))),
+        max(0, min(255, int(round(rgb[1])))),
+        max(0, min(255, int(round(rgb[2]))))
+    )
+
+
+def _lerp_color(c1, c2, t):
+    t = max(0.0, min(1.0, float(t)))
+    r1, g1, b1 = _hex_to_rgb(c1)
+    r2, g2, b2 = _hex_to_rgb(c2)
+    return _rgb_to_hex((r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t))
+
+
+def _multi_color(stops, score):
+    """Interpola continuamente entre una lista de tuplas (pos, '#RRGGBB')."""
+    s = max(0.0, min(1.0, float(score)))
+    for i in range(len(stops) - 1):
+        p0, c0 = stops[i]
+        p1, c1 = stops[i + 1]
+        if p0 <= s <= p1:
+            local_t = (s - p0) / (p1 - p0) if p1 > p0 else 0.0
+            return _lerp_color(c0, c1, local_t)
+    return stops[-1][1]
+
+
+def construir_html_panel_patrimonio(
+    total_patrimonio_ars,
+    total_patrimonio_usd,
+    cant_activos_contemplados,
+    cant_activos_totales,
+    costo_mensual_ars,
+    dolar_b,
+    hay_moneda_extranjera=False
+):
+    tasa_invalida = hay_moneda_extranjera and (dolar_b is None or float(dolar_b) <= 0)
+
+    if tasa_invalida:
+        runway_months = None
+        score = 0.5
+        runway_display = "⚠️ Tasa USD/ARS no disponible"
+        mensaje_salud = (
+            "⚠️ Advertencia: Se detectaron activos o costos en moneda extranjera (USD) "
+            "pero no hay un tipo de cambio válido para convertir ambos valores a ARS."
+        )
+    elif costo_mensual_ars <= 0:
+        runway_months = None
+        score = 1.0 if total_patrimonio_ars > 0 else 0.5
+        runway_display = "Sin costos cargados"
+        mensaje_salud = (
+            "Sin costos cargados: activá o cargá tus costos mensuales en 'Costos e Ingresos' "
+            "para calcular cuántos años y meses podés vivir sin nuevos ingresos."
+        )
+    else:
+        runway_months = float(total_patrimonio_ars) / float(costo_mensual_ars)
+        runway_meses_int = max(0, int(round(runway_months)))
+        anios_rw = runway_meses_int // 12
+        meses_rem_rw = runway_meses_int % 12
+
+        if runway_meses_int <= 12:
+            runway_display = f"{runway_meses_int} meses"
+        else:
+            runway_display = f"{anios_rw} años y {meses_rem_rw} meses"
+
+        if runway_months >= 180.0:
+            score = 1.0
+        elif runway_months <= 24.0:
+            score = 0.0
+        else:
+            score = (runway_months - 24.0) / (180.0 - 24.0)
+
+        if runway_months >= 180.0:
+            mensaje_salud = (
+                f"Estamos muy bien financieramente, te quedan {anios_rw} años y {meses_rem_rw} meses "
+                f"de vivir sin nuevos ingresos"
+            )
+        elif runway_months <= 24.0:
+            mensaje_salud = (
+                f"Estamos en llamas financieramente, te quedan {runway_meses_int} meses "
+                f"de sobrevivir sin ingresos"
+            )
+        elif score >= 0.70:
+            mensaje_salud = (
+                f"Estamos bien financieramente, con buena reserva: te quedan {runway_display} "
+                f"de vivir sin nuevos ingresos"
+            )
+        elif score >= 0.40:
+            mensaje_salud = (
+                f"Atención financiera: el jardín empieza a secarse, te quedan {runway_display} "
+                f"de vivir sin nuevos ingresos"
+            )
+        else:
+            mensaje_salud = (
+                f"Alerta financiera: sequía severa en progreso, te quedan apenas {runway_display} "
+                f"de sobrevivir sin nuevos ingresos"
+            )
+
+    # Interpolación continua de colores del cielo, colinas, suelo y follaje según score (0 a 1)
+    sky_top = _multi_color([
+        (0.0, "#7F1D1D"),
+        (0.25, "#C2410C"),
+        (0.55, "#F59E0B"),
+        (0.80, "#7DD3FC"),
+        (1.0, "#38BDF8")
+    ], score)
+    sky_mid = _multi_color([
+        (0.0, "#DC2626"),
+        (0.25, "#EA580C"),
+        (0.55, "#FDE68A"),
+        (0.80, "#BAE6FD"),
+        (1.0, "#CCFBF1")
+    ], score)
+    sky_bot = _multi_color([
+        (0.0, "#F97316"),
+        (0.25, "#FDBA74"),
+        (0.55, "#FEF3C7"),
+        (0.80, "#DCFCE7"),
+        (1.0, "#BBF7D0")
+    ], score)
+
+    hill_back = _multi_color([
+        (0.0, "#9A3412"),
+        (0.30, "#B45309"),
+        (0.60, "#A16207"),
+        (0.85, "#4ADE80"),
+        (1.0, "#22C55E")
+    ], score)
+    hill_mid = _multi_color([
+        (0.0, "#B45309"),
+        (0.30, "#D97706"),
+        (0.60, "#CA8A04"),
+        (0.85, "#22C55E"),
+        (1.0, "#16A34A")
+    ], score)
+    ground_front = _multi_color([
+        (0.0, "#78350F"),
+        (0.30, "#92400E"),
+        (0.60, "#854D0E"),
+        (0.85, "#15803D"),
+        (1.0, "#166534")
+    ], score)
+
+    leaf_main = _multi_color([
+        (0.0, "#78350F"),
+        (0.25, "#A16207"),
+        (0.55, "#EAB308"),
+        (0.80, "#4ADE80"),
+        (1.0, "#16A34A")
+    ], score)
+    leaf_light = _multi_color([
+        (0.0, "#92400E"),
+        (0.25, "#CA8A04"),
+        (0.55, "#FDE047"),
+        (0.80, "#86EFAC"),
+        (1.0, "#4ADE80")
+    ], score)
+    leaf_dark = _multi_color([
+        (0.0, "#451A03"),
+        (0.25, "#713F12"),
+        (0.55, "#A16207"),
+        (0.80, "#15803D"),
+        (1.0, "#14532D")
+    ], score)
+
+    border_col = _multi_color([
+        (0.0, "#EF4444"),
+        (0.35, "#F59E0B"),
+        (0.70, "#84CC16"),
+        (1.0, "#22C55E")
+    ], score)
+
+    # Parámetros físicos continuos para plantas, sol en llamas y rodadoras (tumbleweeds)
+    fire_opacity = max(0.0, min(1.0, ((1.0 - score) ** 1.35)))
+    sun_radius = 28.0 + (1.0 - score) * 18.0
+    sun_core_col = _multi_color([(0.0, "#FEF08A"), (0.4, "#FDE047"), (1.0, "#FEF9C3")], score)
+    sun_outer_col = _multi_color([(0.0, "#DC2626"), (0.4, "#F97316"), (1.0, "#FBBF24")], score)
+    tumbleweed_opacity = max(0.0, min(1.0, (0.38 - score) / 0.38)) if score < 0.38 else 0.0
+    cracks_opacity = max(0.0, min(1.0, (0.45 - score) / 0.45)) if score < 0.45 else 0.0
+    clouds_opacity = max(0.0, min(0.92, (score - 0.15) / 0.85))
+    flowers_opacity = max(0.0, min(1.0, (score - 0.55) / 0.45))
+
+    # Ángulo de caída/marchitamiento de las plantas y escala por umbral
+    droop_deg = (1.0 - score) * 34.0
+
+    def _plant_style(threshold):
+        if score <= 0.001 or score <= threshold:
+            return 0.0, 0.0
+        sc = max(0.15, min(1.0, (score - threshold) / (1.0 - threshold)))
+        op = max(0.0, min(1.0, (score - threshold) / max(0.18, 1.0 - threshold)))
+        return sc, op
+
+    t1_s, t1_o = _plant_style(0.04)
+    t2_s, t2_o = _plant_style(0.18)
+    t3_s, t3_o = _plant_style(0.35)
+    t4_s, t4_o = _plant_style(0.52)
+    t5_s, t5_o = _plant_style(0.68)
+
+    # Morfología y estado de los personajes (Canguro y Koala) según score
+    ribs_opacity = max(0.0, min(0.95, (0.32 - score) / 0.32)) if score < 0.32 else 0.0
+    fat_scale_x = 0.72 + 0.34 * score  # 1.06 en score=1 (bien alimentado), 0.72 en score=0 (famélico)
+    posture_drop = (1.0 - score) * 14.0
+    ear_droop = (1.0 - score) * 28.0
+
+    if score > 0.65:
+        kanga_anim_class = "jardin-kanga-happy"
+        koala_anim_class = "jardin-koala-happy"
+        mouth_kanga = "M 92 103 Q 100 111 107 102"
+        mouth_koala = "M 1094 114 Q 1102 122 1110 114"
+        eye_state = "happy"
+    elif score > 0.15:
+        kanga_anim_class = "jardin-animal-tired"
+        koala_anim_class = "jardin-animal-tired"
+        mouth_kanga = "M 92 108 Q 100 101 107 108"
+        mouth_koala = "M 1094 120 Q 1102 113 1110 120"
+        eye_state = "sad"
+    else:
+        kanga_anim_class = "jardin-animal-collapse"
+        koala_anim_class = "jardin-animal-collapse"
+        mouth_kanga = "M 91 109 Q 100 100 108 109"
+        mouth_koala = "M 1093 121 Q 1102 112 1111 121"
+        eye_state = "dying"
+
+    # Ojos expresivos según el estado
+    if eye_state == "happy":
+        kanga_eyes_svg = (
+            '<circle cx="96" cy="87" r="4.2" fill="#1F2937"/>'
+            '<circle cx="97.5" cy="85.5" r="1.5" fill="#FFFFFF"/>'
+            '<circle cx="110" cy="87" r="3.8" fill="#1F2937"/>'
+            '<circle cx="111.2" cy="85.5" r="1.3" fill="#FFFFFF"/>'
+        )
+        koala_eyes_svg = (
+            '<circle cx="1090" cy="96" r="4.3" fill="#1F2937"/>'
+            '<circle cx="1091.5" cy="94.5" r="1.5" fill="#FFFFFF"/>'
+            '<circle cx="1114" cy="96" r="4.3" fill="#1F2937"/>'
+            '<circle cx="1115.5" cy="94.5" r="1.5" fill="#FFFFFF"/>'
+            '<ellipse cx="1083" cy="104" rx="5" ry="3" fill="#F472B6" opacity="0.55"/>'
+            '<ellipse cx="1121" cy="104" rx="5" ry="3" fill="#F472B6" opacity="0.55"/>'
+        )
+        tongue_kanga_svg = ""
+        tongue_koala_svg = ""
+    elif eye_state == "sad":
+        kanga_eyes_svg = (
+            '<circle cx="96" cy="89" r="3.8" fill="#1F2937"/>'
+            '<path d="M 90 84 L 101 87" stroke="#451A03" stroke-width="2.2" stroke-linecap="round"/>'
+            '<circle cx="110" cy="89" r="3.5" fill="#1F2937"/>'
+            '<path d="M 105 87 L 115 84" stroke="#451A03" stroke-width="2.2" stroke-linecap="round"/>'
+            '<path d="M 86 95 Q 84 102 86 105 Q 88 102 86 95 Z" fill="#38BDF8" opacity="0.85"/>'
+        )
+        koala_eyes_svg = (
+            '<circle cx="1090" cy="98" r="3.8" fill="#1F2937"/>'
+            '<path d="M 1084 92 L 1095 95" stroke="#1F2937" stroke-width="2.2" stroke-linecap="round"/>'
+            '<circle cx="1114" cy="98" r="3.8" fill="#1F2937"/>'
+            '<path d="M 1109 95 L 1120 92" stroke="#1F2937" stroke-width="2.2" stroke-linecap="round"/>'
+            '<path d="M 1078 104 Q 1076 111 1078 114 Q 1080 111 1078 104 Z" fill="#38BDF8" opacity="0.85"/>'
+        )
+        tongue_kanga_svg = ""
+        tongue_koala_svg = ""
+    else:
+        kanga_eyes_svg = (
+            '<path d="M 92 84 L 99 91 M 99 84 L 92 91" stroke="#1F2937" stroke-width="2.4" stroke-linecap="round"/>'
+            '<path d="M 106 84 L 113 91 M 113 84 L 106 91" stroke="#1F2937" stroke-width="2.4" stroke-linecap="round"/>'
+        )
+        koala_eyes_svg = (
+            '<path d="M 1086 93 L 1094 101 M 1094 93 L 1086 101" stroke="#1F2937" stroke-width="2.4" stroke-linecap="round"/>'
+            '<path d="M 1110 93 L 1118 101 M 1118 93 L 1110 101" stroke="#1F2937" stroke-width="2.4" stroke-linecap="round"/>'
+        )
+        tongue_kanga_svg = '<path d="M 100 106 Q 103 118 98 121 Q 94 119 96 106 Z" fill="#EF4444" stroke="#991B1B" stroke-width="1"/>'
+        tongue_koala_svg = '<path d="M 1102 117 Q 1105 128 1100 130 Q 1096 128 1098 117 Z" fill="#EF4444" stroke="#991B1B" stroke-width="1"/>'
+
+    # Ramita de eucalipto fresca cuando el score es alto vs seca cuando es bajo
+    euca_leaf_op = max(0.0, min(1.0, (score - 0.12) / 0.5))
+
+    pct_salud = int(round(score * 100))
+    badge_bg = _multi_color([
+        (0.0, "#FEE2E2"),
+        (0.35, "#FEF3C7"),
+        (0.75, "#DCFCE7"),
+        (1.0, "#D1FAE5")
+    ], score)
+    badge_text = _multi_color([
+        (0.0, "#991B1B"),
+        (0.35, "#92400E"),
+        (0.75, "#166534"),
+        (1.0, "#065F46")
+    ], score)
+
+    lineas_html = [
+        f'<div class="jardin-health-scene" style="border-color: {border_col};">',
+        f'<svg class="jardin-scene-svg" viewBox="0 0 1200 320" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">',
+        '<defs>',
+        f'<linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">',
+        f'<stop offset="0%" stop-color="{sky_top}"/>',
+        f'<stop offset="55%" stop-color="{sky_mid}"/>',
+        f'<stop offset="100%" stop-color="{sky_bot}"/>',
+        '</linearGradient>',
+        f'<radialGradient id="sunGrad" cx="50%" cy="50%" r="50%">',
+        f'<stop offset="0%" stop-color="{sun_core_col}"/>',
+        f'<stop offset="65%" stop-color="{sun_outer_col}"/>',
+        f'<stop offset="100%" stop-color="{sun_outer_col}" stop-opacity="0"/>',
+        '</radialGradient>',
+        f'<linearGradient id="hillBackGrad" x1="0%" y1="0%" x2="0%" y2="100%">',
+        f'<stop offset="0%" stop-color="{hill_back}"/>',
+        f'<stop offset="100%" stop-color="{ground_front}"/>',
+        '</linearGradient>',
+        f'<linearGradient id="hillMidGrad" x1="0%" y1="0%" x2="0%" y2="100%">',
+        f'<stop offset="0%" stop-color="{hill_mid}"/>',
+        f'<stop offset="100%" stop-color="{ground_front}"/>',
+        '</linearGradient>',
+        f'<linearGradient id="foliage3D" x1="20%" y1="0%" x2="80%" y2="100%">',
+        f'<stop offset="0%" stop-color="{leaf_light}"/>',
+        f'<stop offset="55%" stop-color="{leaf_main}"/>',
+        f'<stop offset="100%" stop-color="{leaf_dark}"/>',
+        '</linearGradient>',
+        '<linearGradient id="trunk3D" x1="0%" y1="0%" x2="100%" y2="0%">',
+        '<stop offset="0%" stop-color="#78350F"/>',
+        '<stop offset="45%" stop-color="#92400E"/>',
+        '<stop offset="100%" stop-color="#451A03"/>',
+        '</linearGradient>',
+        '<radialGradient id="kangaFur3D" cx="35%" cy="30%" r="70%">',
+        '<stop offset="0%" stop-color="#F59E0B"/>',
+        '<stop offset="55%" stop-color="#D97706"/>',
+        '<stop offset="100%" stop-color="#92400E"/>',
+        '</radialGradient>',
+        '<linearGradient id="kangaBelly3D" x1="0%" y1="0%" x2="0%" y2="100%">',
+        '<stop offset="0%" stop-color="#FEF3C7"/>',
+        '<stop offset="100%" stop-color="#FDE68A"/>',
+        '</linearGradient>',
+        '<radialGradient id="koalaFur3D" cx="35%" cy="30%" r="70%">',
+        '<stop offset="0%" stop-color="#9CA3AF"/>',
+        '<stop offset="60%" stop-color="#6B7280"/>',
+        '<stop offset="100%" stop-color="#374151"/>',
+        '</radialGradient>',
+        '<linearGradient id="koalaBelly3D" x1="0%" y1="0%" x2="0%" y2="100%">',
+        '<stop offset="0%" stop-color="#F3F4F6"/>',
+        '<stop offset="100%" stop-color="#D1D5DB"/>',
+        '</linearGradient>',
+        '<filter id="softShadow3D" x="-20%" y="-20%" width="140%" height="140%">',
+        '<feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#000000" flood-opacity="0.24"/>',
+        '</filter>',
+        '</defs>',
+        # Cielo de fondo
+        '<rect x="0" y="0" width="1200" height="320" fill="url(#skyGrad)"/>',
+        # Sol / Sol en llamas (cuando el score baja)
+        f'<g class="jardin-sun-group" transform="translate(600, {68 + int((1.0 - score) * 18)})">',
+        f'<circle cx="0" cy="0" r="{sun_radius * 2.1:.1f}" fill="url(#sunGrad)" opacity="{0.45 + 0.45 * fire_opacity:.2f}"/>',
+        f'<g class="jardin-sun-flames" opacity="{fire_opacity:.2f}">',
+        f'<polygon points="0,-{sun_radius*1.65:.1f} 12,-{sun_radius*0.85:.1f} -12,-{sun_radius*0.85:.1f}" fill="#EF4444"/>',
+        f'<polygon points="0,{sun_radius*1.65:.1f} 12,{sun_radius*0.85:.1f} -12,{sun_radius*0.85:.1f}" fill="#EF4444"/>',
+        f'<polygon points="-{sun_radius*1.65:.1f},0 -{sun_radius*0.85:.1f},12 -{sun_radius*0.85:.1f},-12" fill="#F97316"/>',
+        f'<polygon points="{sun_radius*1.65:.1f},0 {sun_radius*0.85:.1f},12 {sun_radius*0.85:.1f},-12" fill="#F97316"/>',
+        f'<polygon points="-{sun_radius*1.2:.1f},-{sun_radius*1.2:.1f} -{sun_radius*0.5:.1f},-{sun_radius*0.9:.1f} -{sun_radius*0.9:.1f},-{sun_radius*0.5:.1f}" fill="#DC2626"/>',
+        f'<polygon points="{sun_radius*1.2:.1f},-{sun_radius*1.2:.1f} {sun_radius*0.5:.1f},-{sun_radius*0.9:.1f} {sun_radius*0.9:.1f},-{sun_radius*0.5:.1f}" fill="#DC2626"/>',
+        f'<polygon points="-{sun_radius*1.2:.1f},{sun_radius*1.2:.1f} -{sun_radius*0.5:.1f},{sun_radius*0.9:.1f} -{sun_radius*0.9:.1f},{sun_radius*0.5:.1f}" fill="#F59E0B"/>',
+        f'<polygon points="{sun_radius*1.2:.1f},{sun_radius*1.2:.1f} {sun_radius*0.5:.1f},{sun_radius*0.9:.1f} {sun_radius*0.9:.1f},{sun_radius*0.5:.1f}" fill="#F59E0B"/>',
+        '</g>',
+        f'<circle cx="0" cy="0" r="{sun_radius:.1f}" fill="{sun_core_col}" filter="url(#softShadow3D)"/>',
+        '</g>',
+        # Nubes suaves en escenario saludable
+        f'<g class="jardin-clouds" opacity="{clouds_opacity:.2f}" fill="#FFFFFF">',
+        '<g transform="translate(220, 48)" opacity="0.82">',
+        '<ellipse cx="0" cy="0" rx="36" ry="15"/><ellipse cx="-22" cy="4" rx="22" ry="12"/><ellipse cx="24" cy="4" rx="24" ry="11"/>',
+        '</g>',
+        '<g transform="translate(940, 42)" opacity="0.78">',
+        '<ellipse cx="0" cy="0" rx="40" ry="16"/><ellipse cx="-25" cy="5" rx="24" ry="12"/><ellipse cx="25" cy="5" rx="22" ry="11"/>',
+        '</g>',
+        '</g>',
+        # Colinas 3D con parallax y sombras
+        '<path d="M 0 235 Q 190 175 410 220 T 830 210 T 1200 230 L 1200 320 L 0 320 Z" fill="url(#hillBackGrad)" opacity="0.88"/>',
+        '<path d="M 0 255 Q 260 205 560 248 T 1200 245 L 1200 320 L 0 320 Z" fill="url(#hillMidGrad)" opacity="0.95"/>',
+        f'<path d="M 0 276 Q 360 252 720 278 T 1200 272 L 1200 320 L 0 320 Z" fill="{ground_front}"/>',
+        # Grietas de sequía en el suelo cuando el score es bajo
+        f'<g stroke="#451A03" stroke-width="1.8" fill="none" opacity="{cracks_opacity:.2f}">',
+        '<path d="M 250 286 L 272 296 L 260 310 M 272 296 L 295 302"/>',
+        '<path d="M 520 292 L 548 301 L 535 316 M 548 301 L 575 297"/>',
+        '<path d="M 860 285 L 885 298 L 874 314 M 885 298 L 912 303"/>',
+        '</g>',
+        # Bosque / Jardín 3D (se reduce, amarillea y se inclina al bajar el score; desaparece en score=0)
+        f'<g class="jardin-sway-tree" opacity="{t1_o:.2f}" transform="translate(225, 255) scale({t1_s:.2f}) rotate({droop_deg * 0.45:.1f})" filter="url(#softShadow3D)">',
+        '<path d="M -7 0 L -4 -68 L 4 -68 L 7 0 Z" fill="url(#trunk3D)"/>',
+        '<circle cx="0" cy="-82" r="34" fill="url(#foliage3D)"/>',
+        '<circle cx="-22" cy="-68" r="25" fill="url(#foliage3D)"/>',
+        '<circle cx="22" cy="-68" r="25" fill="url(#foliage3D)"/>',
+        '<circle cx="0" cy="-104" r="24" fill="url(#foliage3D)"/>',
+        '</g>',
+        f'<g class="jardin-sway-tree-alt" opacity="{t2_o:.2f}" transform="translate(310, 265) scale({t2_s:.2f}) rotate({droop_deg * 0.6:.1f})" filter="url(#softShadow3D)">',
+        '<path d="M -5 0 L -3 -52 L 3 -52 L 5 0 Z" fill="url(#trunk3D)"/>',
+        '<ellipse cx="0" cy="-64" rx="28" ry="24" fill="url(#foliage3D)"/>',
+        '<circle cx="-16" cy="-54" r="18" fill="url(#foliage3D)"/>',
+        '<circle cx="16" cy="-54" r="18" fill="url(#foliage3D)"/>',
+        '</g>',
+        f'<g class="jardin-sway-tree" opacity="{t3_o:.2f}" transform="translate(890, 262) scale({t3_s:.2f}) rotate(-{droop_deg * 0.55:.1f})" filter="url(#softShadow3D)">',
+        '<path d="M -6 0 L -3 -58 L 3 -58 L 6 0 Z" fill="url(#trunk3D)"/>',
+        '<circle cx="0" cy="-72" r="30" fill="url(#foliage3D)"/>',
+        '<circle cx="-18" cy="-58" r="22" fill="url(#foliage3D)"/>',
+        '<circle cx="18" cy="-58" r="22" fill="url(#foliage3D)"/>',
+        '</g>',
+        f'<g class="jardin-sway-tree-alt" opacity="{t1_o:.2f}" transform="translate(975, 254) scale({t1_s:.2f}) rotate(-{droop_deg * 0.4:.1f})" filter="url(#softShadow3D)">',
+        '<path d="M -7 0 L -4 -70 L 4 -70 L 7 0 Z" fill="url(#trunk3D)"/>',
+        '<circle cx="0" cy="-86" r="35" fill="url(#foliage3D)"/>',
+        '<circle cx="-24" cy="-70" r="25" fill="url(#foliage3D)"/>',
+        '<circle cx="24" cy="-70" r="25" fill="url(#foliage3D)"/>',
+        '<circle cx="0" cy="-108" r="24" fill="url(#foliage3D)"/>',
+        '</g>',
+        # Arbustos y helechos adicionales en niveles altos de salud
+        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(380, 275) scale({t4_s:.2f}) rotate({droop_deg * 0.7:.1f})">',
+        '<ellipse cx="0" cy="-14" rx="22" ry="15" fill="url(#foliage3D)"/>',
+        '<ellipse cx="-14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
+        '<ellipse cx="14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
+        '</g>',
+        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(820, 275) scale({t4_s:.2f}) rotate(-{droop_deg * 0.7:.1f})">',
+        '<ellipse cx="0" cy="-14" rx="22" ry="15" fill="url(#foliage3D)"/>',
+        '<ellipse cx="-14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
+        '<ellipse cx="14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
+        '</g>',
+        f'<g class="jardin-sway-tree" opacity="{t5_o:.2f}" transform="translate(170, 272) scale({t5_s:.2f})">',
+        '<ellipse cx="0" cy="-18" rx="24" ry="16" fill="url(#foliage3D)"/>',
+        '<circle cx="-12" cy="-24" r="14" fill="url(#foliage3D)"/>',
+        '<circle cx="12" cy="-24" r="14" fill="url(#foliage3D)"/>',
+        '</g>',
+        f'<g class="jardin-sway-tree-alt" opacity="{t5_o:.2f}" transform="translate(1030, 272) scale({t5_s:.2f})">',
+        '<ellipse cx="0" cy="-18" rx="24" ry="16" fill="url(#foliage3D)"/>',
+        '<circle cx="-12" cy="-24" r="14" fill="url(#foliage3D)"/>',
+        '<circle cx="12" cy="-24" r="14" fill="url(#foliage3D)"/>',
+        '</g>',
+        # Flores vibrantes cuando la salud es alta
+        f'<g opacity="{flowers_opacity:.2f}">',
+        '<circle cx="205" cy="278" r="4.5" fill="#F472B6"/><circle cx="205" cy="278" r="2" fill="#FEF08A"/>',
+        '<circle cx="268" cy="283" r="4.5" fill="#A78BFA"/><circle cx="268" cy="283" r="2" fill="#FEF08A"/>',
+        '<circle cx="348" cy="280" r="4" fill="#FB7185"/><circle cx="348" cy="280" r="1.8" fill="#FEF08A"/>',
+        '<circle cx="855" cy="282" r="4.5" fill="#F472B6"/><circle cx="855" cy="282" r="2" fill="#FEF08A"/>',
+        '<circle cx="935" cy="279" r="4.5" fill="#A78BFA"/><circle cx="935" cy="279" r="2" fill="#FEF08A"/>',
+        '<circle cx="1008" cy="284" r="4" fill="#FBBF24"/><circle cx="1008" cy="284" r="1.8" fill="#FFFFFF"/>',
+        '</g>',
+        # Plantas rodadoras del desierto (Tumbleweeds) rodando por la arena en escenarios críticos
+        f'<g opacity="{tumbleweed_opacity:.2f}">',
+        '<g class="jardin-tumbleweed-1">',
+        '<circle cx="0" cy="0" r="18" fill="none" stroke="#78350F" stroke-width="2.2" stroke-dasharray="7 4"/>',
+        '<ellipse cx="0" cy="0" rx="18" ry="10" fill="none" stroke="#92400E" stroke-width="1.8" transform="rotate(35)"/>',
+        '<ellipse cx="0" cy="0" rx="18" ry="10" fill="none" stroke="#78350F" stroke-width="1.8" transform="rotate(-35)"/>',
+        '<path d="M -12 -6 L 12 6 M -10 8 L 10 -8" stroke="#92400E" stroke-width="1.5"/>',
+        '</g>',
+        '<g class="jardin-tumbleweed-2">',
+        '<circle cx="0" cy="0" r="14" fill="none" stroke="#78350F" stroke-width="2" stroke-dasharray="5 3"/>',
+        '<ellipse cx="0" cy="0" rx="14" ry="8" fill="none" stroke="#92400E" stroke-width="1.6" transform="rotate(50)"/>',
+        '<ellipse cx="0" cy="0" rx="14" ry="8" fill="none" stroke="#78350F" stroke-width="1.6" transform="rotate(-40)"/>',
+        '</g>',
+        '</g>',
+        # =================================================================
+        # PERSONAJE IZQUIERDO: CANGURO 3D ANIMADO
+        # =================================================================
+        '<ellipse cx="95" cy="292" rx="46" ry="10" fill="#000000" opacity="0.22"/>',
+        f'<g class="{kanga_anim_class}" transform="translate(0, {posture_drop:.1f})" filter="url(#softShadow3D)">',
+        # Cola 3D del canguro
+        '<path d="M 58 232 Q 18 242 14 212 Q 12 196 24 198 Q 36 202 64 216 Z" fill="url(#kangaFur3D)"/>',
+        # Pierna trasera y pata grande
+        '<ellipse cx="72" cy="246" rx="20" ry="28" fill="url(#kangaFur3D)"/>',
+        '<path d="M 58 272 L 108 272 Q 116 272 114 280 L 54 280 Q 48 276 58 272 Z" fill="url(#kangaFur3D)"/>',
+        # Torso y panza 3D (se ensancha en score alto y se adelgaza en score bajo)
+        f'<g transform="translate(90, 195) scale({fat_scale_x:.2f}, 1)">',
+        '<ellipse cx="0" cy="0" rx="34" ry="52" fill="url(#kangaFur3D)"/>',
+        '<ellipse cx="6" cy="4" rx="22" ry="40" fill="url(#kangaBelly3D)"/>',
+        '</g>',
+        # Costillas y huesos visibles cuando el score se acerca a 0
+        f'<g opacity="{ribs_opacity:.2f}" stroke="#FEF3C7" stroke-width="2.6" stroke-linecap="round" fill="none">',
+        '<path d="M 76 172 Q 92 168 104 175"/>',
+        '<path d="M 74 184 Q 92 180 105 187"/>',
+        '<path d="M 75 196 Q 92 192 104 199"/>',
+        '<path d="M 77 208 Q 92 204 102 210"/>',
+        '<circle cx="68" cy="242" r="5" fill="#FEF3C7" stroke="none"/>',
+        '<line x1="68" y1="244" x2="88" y2="274" stroke="#FEF3C7" stroke-width="3.2"/>',
+        '</g>',
+        # Cuello y Cabeza 3D del canguro
+        '<path d="M 80 152 L 90 104 L 110 108 L 104 156 Z" fill="url(#kangaFur3D)"/>',
+        # Orejas (erguidas en score alto, caídas en score bajo)
+        f'<ellipse cx="86" cy="64" rx="7" ry="22" fill="url(#kangaFur3D)" transform="rotate({-18 - ear_droop:.1f} 86 78)"/>',
+        f'<ellipse cx="86" cy="64" rx="3.8" ry="15" fill="#FDE68A" transform="rotate({-18 - ear_droop:.1f} 86 78)"/>',
+        f'<ellipse cx="106" cy="64" rx="7" ry="22" fill="url(#kangaFur3D)" transform="rotate({14 + ear_droop:.1f} 106 78)"/>',
+        f'<ellipse cx="106" cy="64" rx="3.8" ry="15" fill="#FDE68A" transform="rotate({14 + ear_droop:.1f} 106 78)"/>',
+        '<ellipse cx="99" cy="94" rx="22" ry="19" fill="url(#kangaFur3D)"/>',
+        '<ellipse cx="112" cy="98" rx="12" ry="10" fill="url(#kangaBelly3D)"/>',
+        '<circle cx="120" cy="95" r="4.5" fill="#1F2937"/>',
+        kanga_eyes_svg,
+        tongue_kanga_svg,
+        f'<path d="{mouth_kanga}" stroke="#451A03" stroke-width="2.3" fill="none" stroke-linecap="round"/>',
+        # Brazos y ramita de trébol/eucalipto
+        '<path d="M 96 164 Q 122 174 128 186" stroke="#D97706" stroke-width="8" stroke-linecap="round" fill="none"/>',
+        f'<g opacity="{euca_leaf_op:.2f}" transform="translate(128, 184)">',
+        f'<path d="M 0 0 Q 16 -14 26 -24" stroke="#15803D" stroke-width="2.5" fill="none"/>',
+        f'<ellipse cx="14" cy="-14" rx="8" ry="4.5" fill="{leaf_light}" transform="rotate(-30 14 -14)"/>',
+        f'<ellipse cx="24" cy="-22" rx="8" ry="4.5" fill="{leaf_main}" transform="rotate(20 24 -22)"/>',
+        '</g>',
+        '</g>',
+        # =================================================================
+        # PERSONAJE DERECHO: KOALA 3D ANIMADO
+        # =================================================================
+        '<ellipse cx="1102" cy="292" rx="44" ry="10" fill="#000000" opacity="0.22"/>',
+        # Tronco de eucalipto del Koala
+        '<path d="M 1136 296 L 1144 125 L 1160 125 L 1154 296 Z" fill="url(#trunk3D)" filter="url(#softShadow3D)"/>',
+        '<path d="M 1146 165 Q 1115 145 1085 152" stroke="#78350F" stroke-width="8" stroke-linecap="round" fill="none"/>',
+        f'<g class="{koala_anim_class}" transform="translate(0, {posture_drop:.1f})" filter="url(#softShadow3D)">',
+        # Cuerpo 3D del Koala (se ensancha en score alto y se adelgaza en score bajo)
+        f'<g transform="translate(1102, 202) scale({fat_scale_x:.2f}, 1)">',
+        '<ellipse cx="0" cy="0" rx="38" ry="46" fill="url(#koalaFur3D)"/>',
+        '<ellipse cx="-2" cy="6" rx="25" ry="34" fill="url(#koalaBelly3D)"/>',
+        '</g>',
+        # Costillas y huesos visibles en el Koala cuando el score se acerca a 0
+        f'<g opacity="{ribs_opacity:.2f}" stroke="#F3F4F6" stroke-width="2.6" stroke-linecap="round" fill="none">',
+        '<path d="M 1086 182 Q 1102 177 1118 182"/>',
+        '<path d="M 1084 194 Q 1102 189 1120 194"/>',
+        '<path d="M 1085 206 Q 1102 201 1119 206"/>',
+        '<path d="M 1088 218 Q 1102 213 1116 218"/>',
+        '<circle cx="1078" cy="242" r="4.5" fill="#F3F4F6" stroke="none"/>',
+        '<line x1="1078" y1="242" x2="1096" y2="266" stroke="#F3F4F6" stroke-width="3"/>',
+        '</g>',
+        # Patas y brazos del Koala
+        '<ellipse cx="1076" cy="242" rx="14" ry="18" fill="url(#koalaFur3D)"/>',
+        '<ellipse cx="1126" cy="242" rx="14" ry="18" fill="url(#koalaFur3D)"/>',
+        '<ellipse cx="1072" cy="176" rx="13" ry="11" fill="url(#koalaFur3D)"/>',
+        '<ellipse cx="1132" cy="176" rx="13" ry="11" fill="url(#koalaFur3D)"/>',
+        # Orejas redondas peludas del Koala
+        f'<circle cx="1068" cy="{82 + int(ear_droop * 0.35)}" r="18" fill="url(#koalaFur3D)"/>',
+        f'<circle cx="1068" cy="{82 + int(ear_droop * 0.35)}" r="10" fill="#E5E7EB"/>',
+        f'<circle cx="1136" cy="{82 + int(ear_droop * 0.35)}" r="18" fill="url(#koalaFur3D)"/>',
+        f'<circle cx="1136" cy="{82 + int(ear_droop * 0.35)}" r="10" fill="#E5E7EB"/>',
+        # Cabeza y nariz icónica 3D del Koala
+        '<ellipse cx="1102" cy="100" rx="32" ry="27" fill="url(#koalaFur3D)"/>',
+        '<ellipse cx="1102" cy="102" rx="9" ry="13" fill="#1F2937"/>',
+        '<ellipse cx="1099" cy="98" rx="3" ry="4.5" fill="#4B5563"/>',
+        koala_eyes_svg,
+        tongue_koala_svg,
+        f'<path d="{mouth_koala}" stroke="#1F2937" stroke-width="2.3" fill="none" stroke-linecap="round"/>',
+        # Hojita de eucalipto en la mano del Koala
+        f'<g opacity="{euca_leaf_op:.2f}" transform="translate(1062, 168)">',
+        f'<ellipse cx="0" cy="0" rx="11" ry="6" fill="{leaf_light}" transform="rotate(-25)"/>',
+        '</g>',
+        '</g>',
+        '</svg>',
+        # Contenido central legible con efecto cristal (glassmorphism) sobre la escena 3D
+        '<div class="jardin-health-overlay">',
+        '<div class="kpi-title" style="font-size: 1.28rem; color: #1F2937;">Patrimonio Total</div>',
+        f'<div class="kpi-value" style="font-size: 2.35rem; color: #111827;">{total_patrimonio_ars:,.0f} ARS</div>',
+        f'<div class="kpi-usd" style="font-size: 1.18rem; color: #1F2937; background: rgba(255,255,255,0.88);">{total_patrimonio_usd:,.2f} USD</div>',
+        f'<div class="kpi-sub" style="color: #374151; font-weight: 700;">{cant_activos_contemplados} activos de {cant_activos_totales} contemplados</div>',
+        f'<div class="jardin-runway-box" style="background: {badge_bg}; color: {badge_text}; border-color: {border_col};">',
+        f'<div style="font-size: 1.12rem; font-weight: 800; margin-bottom: 3px;">⏱️ Autonomía Financiera (Runway): {runway_display}</div>',
+        f'<div style="font-size: 0.88rem; font-weight: 700; opacity: 0.92; margin-bottom: 5px;">'
+        f'Patrimonio: {total_patrimonio_ars:,.0f} ARS &nbsp;÷&nbsp; Costo mensual de vida: {costo_mensual_ars:,.0f} ARS '
+        f'(Tasa aplicada: 1 USD = {dolar_b:,.0f} ARS)'
+        f'</div>',
+        f'<div style="font-size: 0.98rem; font-weight: 800; line-height: 1.35;">{mensaje_salud}</div>',
+        '<div class="jardin-health-bar-track">',
+        f'<div class="jardin-health-bar-fill" style="width: {pct_salud}%; background: {border_col};"></div>',
+        '</div>',
+        '</div>',
+        '</div>',
+        '</div>'
+    ]
+    return "\n".join(lineas_html)
+
+
 # ----------------- GRÁFICO DE TORTA 2D CON 1 DECIMAL Y SIN POP-UPS (REQ 3 y 4) -----------------
 def formatear_etiqueta_torta(texto, usar_minusculas=False):
     t = str(texto or "").strip()
@@ -1904,7 +2473,151 @@ st.markdown("""
         cursor: default !important;
     }
 
+    /* Escena animada 3D de Salud Financiera (Patrimonio Total y Runway) */
+    .jardin-health-scene {
+        position: relative;
+        border-radius: 22px;
+        border: 3px solid #22C55E;
+        overflow: hidden;
+        margin-bottom: 1.1rem;
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14), inset 0 2px 8px rgba(255, 255, 255, 0.35);
+        min-height: 290px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 18px 175px;
+    }
+    .jardin-scene-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+        pointer-events: none;
+    }
+    .jardin-health-overlay {
+        position: relative;
+        z-index: 2;
+        background: rgba(255, 255, 255, 0.84);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1.5px solid rgba(255, 255, 255, 0.92);
+        border-radius: 18px;
+        padding: 14px 24px;
+        text-align: center;
+        max-width: 680px;
+        width: 100%;
+        box-shadow: 0 8px 24px rgba(17, 24, 39, 0.12);
+    }
+    .jardin-runway-box {
+        margin-top: 10px;
+        padding: 10px 14px;
+        border-radius: 13px;
+        border: 1.5px solid;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+    }
+    .jardin-health-bar-track {
+        width: 100%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.75);
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 7px;
+        border: 1px solid rgba(0,0,0,0.08);
+    }
+    .jardin-health-bar-fill {
+        height: 100%;
+        border-radius: 999px;
+        transition: width 0.5s ease;
+    }
+
+    @keyframes jardinTreeSway {
+        0%, 100% { transform: translateY(0px) rotate(0deg); }
+        50% { transform: translateY(-2px) rotate(2.2deg); }
+    }
+    @keyframes jardinKangaBounce {
+        0%, 100% { transform: translateY(0px) scaleY(1); }
+        45% { transform: translateY(-10px) scaleY(1.03); }
+        55% { transform: translateY(-10px) scaleY(1.03); }
+    }
+    @keyframes jardinKoalaSway {
+        0%, 100% { transform: translateY(0px) rotate(0deg); }
+        50% { transform: translateY(-4px) rotate(-2.5deg); }
+    }
+    @keyframes jardinTiredBreath {
+        0%, 100% { transform: translateY(8px) scaleY(0.98); }
+        50% { transform: translateY(11px) scaleY(0.95); }
+    }
+    @keyframes jardinCollapseTremble {
+        0%, 100% { transform: translateY(16px) rotate(-4deg); }
+        25% { transform: translateY(17px) rotate(-5.2deg); }
+        75% { transform: translateY(16px) rotate(-2.8deg); }
+    }
+    @keyframes jardinSunFireSpin {
+        0% { transform: rotate(0deg) scale(1); }
+        50% { transform: translateY(-1px) rotate(180deg) scale(1.09); }
+        100% { transform: rotate(360deg) scale(1); }
+    }
+    @keyframes jardinTumbleweedRoll1 {
+        0% { transform: translate(160px, 278px) rotate(0deg); }
+        25% { transform: translate(420px, 262px) rotate(180deg); }
+        50% { transform: translate(680px, 280px) rotate(360deg); }
+        75% { transform: translate(910px, 264px) rotate(540deg); }
+        100% { transform: translate(1080px, 279px) rotate(720deg); }
+    }
+    @keyframes jardinTumbleweedRoll2 {
+        0% { transform: translate(260px, 285px) rotate(0deg); }
+        50% { transform: translate(640px, 270px) rotate(360deg); }
+        100% { transform: translate(990px, 284px) rotate(720deg); }
+    }
+
+    .jardin-kanga-happy {
+        animation: jardinKangaBounce 2.4s ease-in-out infinite;
+        transform-origin: 95px 280px;
+    }
+    .jardin-koala-happy {
+        animation: jardinKoalaSway 2.8s ease-in-out infinite;
+        transform-origin: 1102px 240px;
+    }
+    .jardin-animal-tired {
+        animation: jardinTiredBreath 3.4s ease-in-out infinite;
+        transform-origin: center bottom;
+    }
+    .jardin-animal-collapse {
+        animation: jardinCollapseTremble 1.6s ease-in-out infinite;
+        transform-origin: center bottom;
+    }
+    .jardin-sun-flames {
+        animation: jardinSunFireSpin 7s linear infinite;
+    }
+    .jardin-tumbleweed-1 {
+        animation: jardinTumbleweedRoll1 7.5s linear infinite;
+    }
+    .jardin-tumbleweed-2 {
+        animation: jardinTumbleweedRoll2 9.5s linear infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .jardin-kanga-happy,
+        .jardin-koala-happy,
+        .jardin-animal-tired,
+        .jardin-animal-collapse,
+        .jardin-sun-flames,
+        .jardin-tumbleweed-1,
+        .jardin-tumbleweed-2 {
+            animation: none !important;
+        }
+    }
+
     @media (max-width: 768px) {
+        .jardin-health-scene {
+            padding: 14px 12px !important;
+            min-height: 320px !important;
+        }
+        .jardin-health-overlay {
+            padding: 12px 14px !important;
+            background: rgba(255, 255, 255, 0.88) !important;
+        }
         .block-container {
             max-width: 100% !important;
             padding-top: 3.2rem !important;
@@ -2356,7 +3069,7 @@ def mover_categoria_ingreso(idx_actual, direccion):
 # ----------------- PESTAÑAS PRINCIPALES CON 🍀 (CAMBIO 1) -----------------
 pestana1, pestana2 = st.tabs([
     "🍀 COSTOS E INGRESOS",
-    "🍀 CARTERA DE INVERSIONES"
+    "🍀 PATRIMONIO TOTAL"
 ])
 
 # =========================================================================
@@ -2968,14 +3681,44 @@ with pestana2:
     total_patrimonio_ars = df_inv_activos["Valor en ARS"].sum() if not df_inv_activos.empty else 0
     total_patrimonio_usd = df_inv_activos["Valor en USD"].sum() if not df_inv_activos.empty else 0
 
-    st.markdown(f"""
-    <div class="metric-card metric-card-lila" style="text-align: center;">
-        <div class="kpi-title" style="font-size: 1.25rem;">Patrimonio Total</div>
-        <div class="kpi-value" style="font-size: 2.35rem;">{total_patrimonio_ars:,.0f} ARS</div>
-        <div class="kpi-usd" style="font-size: 1.2rem;">{total_patrimonio_usd:,.2f} USD</div>
-        <div class="kpi-sub">{len(df_inv_activos)} activos de {len(inversiones)} contemplados</div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Calcular el costo mensual de vida en ARS en vivo desde la pestaña "Costos e Ingresos"
+    costos_activos_live = [c for c in datos.get("costos", []) if c.get("activo", True)]
+    costo_mensual_vivir_ars = 0.0
+    hay_costo_usd = False
+    for c_item in costos_activos_live:
+        monto_c = float(c_item.get("monto", 0))
+        moneda_c = str(c_item.get("moneda", "ARS")).upper().strip()
+        if moneda_c == "USD":
+            hay_costo_usd = True
+            costo_mensual_vivir_ars += monto_c * dolar_b if dolar_b and dolar_b > 0 else 0.0
+        else:
+            costo_mensual_vivir_ars += monto_c
+
+    hay_activo_usd = any(
+        inv.get("activo_inv", True) and inv.get("tipo") in ["Dólares USD", "Dólar Billete", "A - Dólar Billete", "Criptomonedas", "Acciones"]
+        for inv in inversiones
+    )
+    hay_moneda_ext = hay_costo_usd or hay_activo_usd
+
+    if not dolar_b or dolar_b <= 0:
+        dolar_b = st.number_input(
+            "Tipo de cambio USD a ARS (requerido para unificar moneda en ARS):",
+            min_value=1.0,
+            value=1575.0,
+            step=10.0,
+            key="input_tasa_cambio_fallback"
+        )
+
+    html_panel_salud = construir_html_panel_patrimonio(
+        total_patrimonio_ars=total_patrimonio_ars,
+        total_patrimonio_usd=total_patrimonio_usd,
+        cant_activos_contemplados=len(df_inv_activos),
+        cant_activos_totales=len(inversiones),
+        costo_mensual_ars=costo_mensual_vivir_ars,
+        dolar_b=dolar_b,
+        hay_moneda_extranjera=hay_moneda_ext
+    )
+    st.markdown(html_panel_salud, unsafe_allow_html=True)
 
     st.markdown("---")
 
