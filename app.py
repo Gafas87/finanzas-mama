@@ -613,7 +613,7 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None, ubicac
 
 
 
-# ----------------- PANEL DINÁMICO 3D DE SALUD FINANCIERA Y RUNWAY -----------------
+# ----------------- PANEL DINÁMICO 3D DE SALUD FINANCIERA -----------------
 def _hex_to_rgb(h):
     h = h.lstrip("#")
     return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
@@ -646,6 +646,306 @@ def _multi_color(stops, score):
     return stops[-1][1]
 
 
+def _construir_svg_canguro(score):
+    """Genera el SVG 3D del canguro: esqueleto con moscas en score=0, cansado/triste en medio, feliz/alimentado en alto."""
+    if score <= 0.02:
+        # Score 0: Tirado muerto en el suelo, únicamente huesos visibles (sin pelaje) y moscas zumbando alrededor
+        return (
+            '<svg class="jardin-char-svg" viewBox="0 0 170 150" style="overflow: visible;" xmlns="http://www.w3.org/2000/svg">'
+            '<defs>'
+            '<linearGradient id="bone3DK" x1="0%" y1="0%" x2="0%" y2="100%">'
+            '<stop offset="0%" stop-color="#FEFCE8"/>'
+            '<stop offset="55%" stop-color="#E7E5E4"/>'
+            '<stop offset="100%" stop-color="#A8A29E"/>'
+            '</linearGradient>'
+            '<filter id="boneShadowK" x="-20%" y="-20%" width="140%" height="140%">'
+            '<feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.38"/>'
+            '</filter>'
+            '</defs>'
+            # Sombra en la arena debajo del esqueleto
+            '<ellipse cx="86" cy="134" rx="68" ry="9" fill="#000000" opacity="0.28"/>'
+            '<g filter="url(#boneShadowK)">'
+            # Cola ósea segmentada (vértebras caudales sobre el suelo)
+            '<path d="M 10 130 Q 28 134 48 126" stroke="url(#bone3DK)" stroke-width="5.5" stroke-dasharray="6 3" stroke-linecap="round" fill="none"/>'
+            # Pelvis 3D
+            '<ellipse cx="52" cy="122" rx="11" ry="8" fill="url(#bone3DK)" transform="rotate(-15 52 122)"/>'
+            '<circle cx="52" cy="122" r="3.5" fill="#57534E"/>'
+            # Fémur, tibia y pie largo óseo de canguro tirado en la arena
+            '<line x1="50" y1="124" x2="30" y2="136" stroke="url(#bone3DK)" stroke-width="5.5" stroke-linecap="round"/>'
+            '<circle cx="30" cy="136" r="3.8" fill="url(#bone3DK)"/>'
+            '<line x1="30" y1="136" x2="56" y2="140" stroke="url(#bone3DK)" stroke-width="4.5" stroke-linecap="round"/>'
+            '<line x1="56" y1="140" x2="78" y2="139" stroke="url(#bone3DK)" stroke-width="3.8" stroke-linecap="round"/>'
+            # Columna vertebral arqueada en el suelo
+            '<path d="M 58 120 Q 84 110 112 122" stroke="url(#bone3DK)" stroke-width="6" stroke-dasharray="7 3" stroke-linecap="round" fill="none"/>'
+            # Costillas 3D (arcos óseos sin piel ni pelaje)
+            '<path d="M 68 117 Q 70 94 80 102" stroke="url(#bone3DK)" stroke-width="4" stroke-linecap="round" fill="none"/>'
+            '<path d="M 77 115 Q 80 90 90 100" stroke="url(#bone3DK)" stroke-width="4" stroke-linecap="round" fill="none"/>'
+            '<path d="M 86 115 Q 90 92 99 101" stroke="url(#bone3DK)" stroke-width="4" stroke-linecap="round" fill="none"/>'
+            '<path d="M 95 117 Q 98 96 106 104" stroke="url(#bone3DK)" stroke-width="3.8" stroke-linecap="round" fill="none"/>'
+            '<path d="M 103 119 Q 106 102 112 108" stroke="url(#bone3DK)" stroke-width="3.4" stroke-linecap="round" fill="none"/>'
+            # Huesos del brazo delantero caído en la arena
+            '<line x1="106" y1="121" x2="96" y2="136" stroke="url(#bone3DK)" stroke-width="4.2" stroke-linecap="round"/>'
+            '<line x1="96" y1="136" x2="112" y2="139" stroke="url(#bone3DK)" stroke-width="3.5" stroke-linecap="round"/>'
+            # Cráneo de canguro en 3D recostado sobre la arena (sin orejas ni pelaje)
+            '<g transform="translate(116, 114) rotate(18)">'
+            '<ellipse cx="10" cy="4" rx="14" ry="10" fill="url(#bone3DK)"/>'
+            '<path d="M 18 -2 L 38 3 Q 40 7 35 9 L 16 9 Z" fill="url(#bone3DK)"/>'
+            '<path d="M 14 9 L 33 12 L 31 15 L 12 13 Z" fill="#D6D3D1"/>'
+            # Cuenca ocular vacía y fosa nasal del cráneo
+            '<ellipse cx="14" cy="2" rx="4.5" ry="3.8" fill="#1C1917"/>'
+            '<polygon points="33,4 37,5 34,7" fill="#1C1917"/>'
+            # Dientes visibles en la mandíbula
+            '<line x1="20" y1="9" x2="32" y2="10" stroke="#78716C" stroke-width="1.4" stroke-dasharray="2 2"/>'
+            '</g>'
+            '</g>'
+            # Moscas animadas zumbando alrededor del esqueleto del canguro
+            '<g class="jardin-fly-1" transform="translate(78, 78)">'
+            '<ellipse cx="-2.5" cy="-2.5" rx="3.2" ry="1.8" fill="#E0F2FE" opacity="0.85" transform="rotate(-25)"/>'
+            '<ellipse cx="2.5" cy="-2.5" rx="3.2" ry="1.8" fill="#E0F2FE" opacity="0.85" transform="rotate(25)"/>'
+            '<ellipse cx="0" cy="0" rx="3.2" ry="2.2" fill="#111827"/>'
+            '</g>'
+            '<g class="jardin-fly-2" transform="translate(122, 86)">'
+            '<ellipse cx="-2.2" cy="-2.2" rx="2.8" ry="1.6" fill="#E0F2FE" opacity="0.85" transform="rotate(-25)"/>'
+            '<ellipse cx="2.2" cy="-2.2" rx="2.8" ry="1.6" fill="#E0F2FE" opacity="0.85" transform="rotate(25)"/>'
+            '<ellipse cx="0" cy="0" rx="2.8" ry="1.9" fill="#111827"/>'
+            '</g>'
+            '<g class="jardin-fly-3" transform="translate(46, 92)">'
+            '<ellipse cx="-2.2" cy="-2.2" rx="2.8" ry="1.6" fill="#E0F2FE" opacity="0.85" transform="rotate(-25)"/>'
+            '<ellipse cx="2.2" cy="-2.2" rx="2.8" ry="1.6" fill="#E0F2FE" opacity="0.85" transform="rotate(25)"/>'
+            '<ellipse cx="0" cy="0" rx="2.8" ry="1.9" fill="#111827"/>'
+            '</g>'
+            '</svg>'
+        )
+
+    # Score > 0.02: Canguro vivo (alto = feliz y bien alimentado; medio/bajo = delgado, cansado y triste)
+    fat_scale_x = 0.74 + 0.32 * score
+    posture_drop = (1.0 - score) * 12.0
+    ear_droop = (1.0 - score) * 26.0
+    ribs_opacity = max(0.0, min(0.75, (0.35 - score) / 0.35)) if score < 0.35 else 0.0
+    euca_leaf_op = max(0.0, min(1.0, (score - 0.15) / 0.5))
+    leaf_col = _multi_color([(0.0, "#A16207"), (0.5, "#EAB308"), (1.0, "#22C55E")], score)
+
+    if score >= 0.65:
+        anim_cls = "jardin-kanga-happy"
+        mouth_d = "M 82 65 Q 90 73 97 64"
+        eyes_svg = (
+            '<circle cx="85" cy="50" r="4" fill="#1F2937"/>'
+            '<circle cx="86.4" cy="48.6" r="1.4" fill="#FFFFFF"/>'
+            '<circle cx="99" cy="50" r="3.6" fill="#1F2937"/>'
+            '<circle cx="100.2" cy="48.6" r="1.2" fill="#FFFFFF"/>'
+            '<ellipse cx="78" cy="57" rx="4.5" ry="2.5" fill="#F472B6" opacity="0.5"/>'
+        )
+    else:
+        anim_cls = "jardin-animal-tired"
+        mouth_d = "M 82 70 Q 90 63 97 70"
+        eyes_svg = (
+            '<circle cx="85" cy="52" r="3.6" fill="#1F2937"/>'
+            '<path d="M 79 47 L 90 50" stroke="#451A03" stroke-width="2.1" stroke-linecap="round"/>'
+            '<circle cx="99" cy="52" r="3.4" fill="#1F2937"/>'
+            '<path d="M 94 50 L 104 47" stroke="#451A03" stroke-width="2.1" stroke-linecap="round"/>'
+            '<path d="M 75 58 Q 73 65 75 68 Q 77 65 75 58 Z" fill="#38BDF8" opacity="0.85"/>'
+        )
+
+    return (
+        '<svg class="jardin-char-svg" viewBox="0 0 160 220" style="overflow: visible;" xmlns="http://www.w3.org/2000/svg">'
+        '<defs>'
+        '<radialGradient id="kangaFur3D" cx="35%" cy="30%" r="70%">'
+        '<stop offset="0%" stop-color="#F59E0B"/>'
+        '<stop offset="55%" stop-color="#D97706"/>'
+        '<stop offset="100%" stop-color="#92400E"/>'
+        '</radialGradient>'
+        '<linearGradient id="kangaBelly3D" x1="0%" y1="0%" x2="0%" y2="100%">'
+        '<stop offset="0%" stop-color="#FEF3C7"/>'
+        '<stop offset="100%" stop-color="#FDE68A"/>'
+        '</linearGradient>'
+        '<filter id="kangaShadow3D" x="-20%" y="-20%" width="140%" height="140%">'
+        '<feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.25"/>'
+        '</filter>'
+        '</defs>'
+        '<ellipse cx="82" cy="204" rx="42" ry="9" fill="#000000" opacity="0.22"/>'
+        f'<g class="{anim_cls}" transform="translate(0, {posture_drop:.1f})" filter="url(#kangaShadow3D)">'
+        '<path d="M 48 152 Q 12 160 10 134 Q 8 120 20 122 Q 30 126 54 138 Z" fill="url(#kangaFur3D)"/>'
+        '<ellipse cx="62" cy="164" rx="18" ry="26" fill="url(#kangaFur3D)"/>'
+        '<path d="M 48 188 L 96 188 Q 104 188 102 195 L 44 195 Q 38 191 48 188 Z" fill="url(#kangaFur3D)"/>'
+        f'<g transform="translate(78, 120) scale({fat_scale_x:.2f}, 1)">'
+        '<ellipse cx="0" cy="0" rx="31" ry="46" fill="url(#kangaFur3D)"/>'
+        '<ellipse cx="5" cy="4" rx="20" ry="35" fill="url(#kangaBelly3D)"/>'
+        '</g>'
+        f'<g opacity="{ribs_opacity:.2f}" stroke="#FEF3C7" stroke-width="2.2" stroke-linecap="round" fill="none">'
+        '<path d="M 66 102 Q 80 98 91 104"/>'
+        '<path d="M 65 113 Q 80 109 92 115"/>'
+        '<path d="M 66 124 Q 80 120 91 126"/>'
+        '</g>'
+        '<path d="M 70 82 L 79 42 L 98 46 L 92 86 Z" fill="url(#kangaFur3D)"/>'
+        f'<ellipse cx="75" cy="28" rx="6.5" ry="20" fill="url(#kangaFur3D)" transform="rotate({-16 - ear_droop:.1f} 75 42)"/>'
+        f'<ellipse cx="75" cy="28" rx="3.5" ry="13" fill="#FDE68A" transform="rotate({-16 - ear_droop:.1f} 75 42)"/>'
+        f'<ellipse cx="95" cy="28" rx="6.5" ry="20" fill="url(#kangaFur3D)" transform="rotate({14 + ear_droop:.1f} 95 42)"/>'
+        f'<ellipse cx="95" cy="28" rx="3.5" ry="13" fill="#FDE68A" transform="rotate({14 + ear_droop:.1f} 95 42)"/>'
+        '<ellipse cx="88" cy="56" rx="20" ry="17" fill="url(#kangaFur3D)"/>'
+        '<ellipse cx="100" cy="60" rx="11" ry="9" fill="url(#kangaBelly3D)"/>'
+        '<circle cx="108" cy="57" r="4" fill="#1F2937"/>'
+        + eyes_svg +
+        f'<path d="{mouth_d}" stroke="#451A03" stroke-width="2.2" fill="none" stroke-linecap="round"/>'
+        '<path d="M 84 94 Q 108 102 114 114" stroke="#D97706" stroke-width="7.5" stroke-linecap="round" fill="none"/>'
+        f'<g opacity="{euca_leaf_op:.2f}" transform="translate(114, 112)">'
+        '<path d="M 0 0 Q 14 -12 22 -20" stroke="#15803D" stroke-width="2.2" fill="none"/>'
+        f'<ellipse cx="12" cy="-12" rx="7" ry="4" fill="{leaf_col}" transform="rotate(-30 12 -12)"/>'
+        f'<ellipse cx="20" cy="-18" rx="7" ry="4" fill="{leaf_col}" transform="rotate(20 20 -18)"/>'
+        '</g>'
+        '</g>'
+        '</svg>'
+    )
+
+
+def _construir_svg_koala(score):
+    """Genera el SVG 3D del koala: esqueleto con moscas en score=0, cansado/triste en medio, feliz/alimentado en alto."""
+    if score <= 0.02:
+        # Score 0: Tirado muerto en el suelo, únicamente huesos visibles (sin pelaje) y moscas zumbando alrededor
+        return (
+            '<svg class="jardin-char-svg" viewBox="0 0 170 150" style="overflow: visible;" xmlns="http://www.w3.org/2000/svg">'
+            '<defs>'
+            '<linearGradient id="bone3DKo" x1="0%" y1="0%" x2="0%" y2="100%">'
+            '<stop offset="0%" stop-color="#FEFCE8"/>'
+            '<stop offset="55%" stop-color="#E7E5E4"/>'
+            '<stop offset="100%" stop-color="#A8A29E"/>'
+            '</linearGradient>'
+            '<filter id="boneShadowKo" x="-20%" y="-20%" width="140%" height="140%">'
+            '<feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.38"/>'
+            '</filter>'
+            '</defs>'
+            '<ellipse cx="86" cy="134" rx="62" ry="9" fill="#000000" opacity="0.28"/>'
+            '<g filter="url(#boneShadowKo)">'
+            # Pelvis y huesos de las patas traseras en el suelo
+            '<ellipse cx="122" cy="123" rx="10" ry="7.5" fill="url(#bone3DKo)" transform="rotate(12 122 123)"/>'
+            '<circle cx="122" cy="123" r="3" fill="#57534E"/>'
+            '<line x1="124" y1="125" x2="142" y2="137" stroke="url(#bone3DKo)" stroke-width="5" stroke-linecap="round"/>'
+            '<line x1="142" y1="137" x2="126" y2="140" stroke="url(#bone3DKo)" stroke-width="4" stroke-linecap="round"/>'
+            # Columna vertebral de koala en el suelo
+            '<path d="M 62 122 Q 92 112 118 122" stroke="url(#bone3DKo)" stroke-width="6" stroke-dasharray="6 3" stroke-linecap="round" fill="none"/>'
+            # Costillas 3D (arcos óseos expuestos sin pelaje)
+            '<path d="M 70 119 Q 72 95 80 103" stroke="url(#bone3DKo)" stroke-width="4" stroke-linecap="round" fill="none"/>'
+            '<path d="M 79 117 Q 81 92 89 101" stroke="url(#bone3DKo)" stroke-width="4" stroke-linecap="round" fill="none"/>'
+            '<path d="M 88 116 Q 90 93 98 102" stroke="url(#bone3DKo)" stroke-width="4" stroke-linecap="round" fill="none"/>'
+            '<path d="M 97 117 Q 99 95 106 104" stroke="url(#bone3DKo)" stroke-width="3.8" stroke-linecap="round" fill="none"/>'
+            '<path d="M 106 119 Q 108 99 114 107" stroke="url(#bone3DKo)" stroke-width="3.5" stroke-linecap="round" fill="none"/>'
+            # Huesos del brazo delantero caído en la arena
+            '<line x1="70" y1="122" x2="80" y2="137" stroke="url(#bone3DKo)" stroke-width="4.5" stroke-linecap="round"/>'
+            '<line x1="80" y1="137" x2="64" y2="139" stroke="url(#bone3DKo)" stroke-width="3.8" stroke-linecap="round"/>'
+            # Cráneo redondeado de koala en 3D recostado sobre la arena (sin pelaje)
+            '<g transform="translate(44, 114) rotate(-16)">'
+            '<ellipse cx="10" cy="4" rx="16" ry="13" fill="url(#bone3DKo)"/>'
+            '<ellipse cx="2" cy="12" rx="11" ry="6" fill="#D6D3D1"/>'
+            # Cuencas oculares vacías y cavidad nasal característica del cráneo de koala
+            '<circle cx="5" cy="2" r="4.5" fill="#1C1917"/>'
+            '<circle cx="16" cy="2" r="4.2" fill="#1C1917"/>'
+            '<polygon points="9,6 6,12 13,12" fill="#1C1917"/>'
+            '<line x1="3" y1="14" x2="14" y2="14" stroke="#78716C" stroke-width="1.5" stroke-dasharray="2 2"/>'
+            '</g>'
+            '</g>'
+            # Moscas animadas zumbando alrededor del esqueleto del koala
+            '<g class="jardin-fly-2" transform="translate(52, 82)">'
+            '<ellipse cx="-2.5" cy="-2.5" rx="3.2" ry="1.8" fill="#E0F2FE" opacity="0.85" transform="rotate(-25)"/>'
+            '<ellipse cx="2.5" cy="-2.5" rx="3.2" ry="1.8" fill="#E0F2FE" opacity="0.85" transform="rotate(25)"/>'
+            '<ellipse cx="0" cy="0" rx="3.2" ry="2.2" fill="#111827"/>'
+            '</g>'
+            '<g class="jardin-fly-1" transform="translate(96, 78)">'
+            '<ellipse cx="-2.2" cy="-2.2" rx="2.8" ry="1.6" fill="#E0F2FE" opacity="0.85" transform="rotate(-25)"/>'
+            '<ellipse cx="2.2" cy="-2.2" rx="2.8" ry="1.6" fill="#E0F2FE" opacity="0.85" transform="rotate(25)"/>'
+            '<ellipse cx="0" cy="0" rx="2.8" ry="1.9" fill="#111827"/>'
+            '</g>'
+            '<g class="jardin-fly-3" transform="translate(124, 90)">'
+            '<ellipse cx="-2.2" cy="-2.2" rx="2.8" ry="1.6" fill="#E0F2FE" opacity="0.85" transform="rotate(-25)"/>'
+            '<ellipse cx="2.2" cy="-2.2" rx="2.8" ry="1.6" fill="#E0F2FE" opacity="0.85" transform="rotate(25)"/>'
+            '<ellipse cx="0" cy="0" rx="2.8" ry="1.9" fill="#111827"/>'
+            '</g>'
+            '</svg>'
+        )
+
+    # Score > 0.02: Koala vivo (alto = feliz y bien alimentado; medio/bajo = delgado, cansado y triste)
+    fat_scale_x = 0.74 + 0.32 * score
+    posture_drop = (1.0 - score) * 12.0
+    ear_droop = (1.0 - score) * 22.0
+    ribs_opacity = max(0.0, min(0.75, (0.35 - score) / 0.35)) if score < 0.35 else 0.0
+    euca_leaf_op = max(0.0, min(1.0, (score - 0.15) / 0.5))
+    leaf_col = _multi_color([(0.0, "#A16207"), (0.5, "#EAB308"), (1.0, "#22C55E")], score)
+
+    if score >= 0.65:
+        anim_cls = "jardin-koala-happy"
+        mouth_d = "M 72 78 Q 80 86 88 78"
+        eyes_svg = (
+            '<circle cx="68" cy="62" r="4.2" fill="#1F2937"/>'
+            '<circle cx="69.4" cy="60.6" r="1.4" fill="#FFFFFF"/>'
+            '<circle cx="92" cy="62" r="4.2" fill="#1F2937"/>'
+            '<circle cx="93.4" cy="60.6" r="1.4" fill="#FFFFFF"/>'
+            '<ellipse cx="61" cy="70" rx="5" ry="2.8" fill="#F472B6" opacity="0.55"/>'
+            '<ellipse cx="99" cy="70" rx="5" ry="2.8" fill="#F472B6" opacity="0.55"/>'
+        )
+    else:
+        anim_cls = "jardin-animal-tired"
+        mouth_d = "M 72 84 Q 80 77 88 84"
+        eyes_svg = (
+            '<circle cx="68" cy="64" r="3.6" fill="#1F2937"/>'
+            '<path d="M 62 58 L 73 61" stroke="#1F2937" stroke-width="2.1" stroke-linecap="round"/>'
+            '<circle cx="92" cy="64" r="3.6" fill="#1F2937"/>'
+            '<path d="M 87 61 L 98 58" stroke="#1F2937" stroke-width="2.1" stroke-linecap="round"/>'
+            '<path d="M 56 70 Q 54 77 56 80 Q 58 77 56 70 Z" fill="#38BDF8" opacity="0.85"/>'
+        )
+
+    return (
+        '<svg class="jardin-char-svg" viewBox="0 0 160 220" style="overflow: visible;" xmlns="http://www.w3.org/2000/svg">'
+        '<defs>'
+        '<radialGradient id="koalaFur3D" cx="35%" cy="30%" r="70%">'
+        '<stop offset="0%" stop-color="#9CA3AF"/>'
+        '<stop offset="60%" stop-color="#6B7280"/>'
+        '<stop offset="100%" stop-color="#374151"/>'
+        '</radialGradient>'
+        '<linearGradient id="koalaBelly3D" x1="0%" y1="0%" x2="0%" y2="100%">'
+        '<stop offset="0%" stop-color="#F3F4F6"/>'
+        '<stop offset="100%" stop-color="#D1D5DB"/>'
+        '</linearGradient>'
+        '<linearGradient id="koalaTrunk3D" x1="0%" y1="0%" x2="100%" y2="0%">'
+        '<stop offset="0%" stop-color="#78350F"/>'
+        '<stop offset="50%" stop-color="#92400E"/>'
+        '<stop offset="100%" stop-color="#451A03"/>'
+        '</linearGradient>'
+        '<filter id="koalaShadow3D" x="-20%" y="-20%" width="140%" height="140%">'
+        '<feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.25"/>'
+        '</filter>'
+        '</defs>'
+        '<ellipse cx="80" cy="204" rx="40" ry="9" fill="#000000" opacity="0.22"/>'
+        '<path d="M 114 206 L 122 55 L 136 55 L 130 206 Z" fill="url(#koalaTrunk3D)" filter="url(#koalaShadow3D)"/>'
+        '<path d="M 122 98 Q 96 82 68 88" stroke="#78350F" stroke-width="7" stroke-linecap="round" fill="none"/>'
+        f'<g class="{anim_cls}" transform="translate(0, {posture_drop:.1f})" filter="url(#koalaShadow3D)">'
+        f'<g transform="translate(80, 134) scale({fat_scale_x:.2f}, 1)">'
+        '<ellipse cx="0" cy="0" rx="34" ry="42" fill="url(#koalaFur3D)"/>'
+        '<ellipse cx="-2" cy="5" rx="22" ry="30" fill="url(#koalaBelly3D)"/>'
+        '</g>'
+        f'<g opacity="{ribs_opacity:.2f}" stroke="#F3F4F6" stroke-width="2.2" stroke-linecap="round" fill="none">'
+        '<path d="M 66 116 Q 80 112 94 116"/>'
+        '<path d="M 64 127 Q 80 123 96 127"/>'
+        '<path d="M 66 138 Q 80 134 94 138"/>'
+        '</g>'
+        '<ellipse cx="56" cy="170" rx="13" ry="16" fill="url(#koalaFur3D)"/>'
+        '<ellipse cx="102" cy="170" rx="13" ry="16" fill="url(#koalaFur3D)"/>'
+        '<ellipse cx="52" cy="110" rx="12" ry="10" fill="url(#koalaFur3D)"/>'
+        '<ellipse cx="108" cy="110" rx="12" ry="10" fill="url(#koalaFur3D)"/>'
+        f'<circle cx="48" cy="{48 + int(ear_droop * 0.35)}" r="16" fill="url(#koalaFur3D)"/>'
+        f'<circle cx="48" cy="{48 + int(ear_droop * 0.35)}" r="9" fill="#E5E7EB"/>'
+        f'<circle cx="112" cy="{48 + int(ear_droop * 0.35)}" r="16" fill="url(#koalaFur3D)"/>'
+        f'<circle cx="112" cy="{48 + int(ear_droop * 0.35)}" r="9" fill="#E5E7EB"/>'
+        '<ellipse cx="80" cy="66" rx="29" ry="25" fill="url(#koalaFur3D)"/>'
+        '<ellipse cx="80" cy="68" rx="8" ry="11.5" fill="#1F2937"/>'
+        '<ellipse cx="77.5" cy="64.5" rx="2.6" ry="4" fill="#4B5563"/>'
+        + eyes_svg +
+        f'<path d="{mouth_d}" stroke="#1F2937" stroke-width="2.2" fill="none" stroke-linecap="round"/>'
+        f'<g opacity="{euca_leaf_op:.2f}" transform="translate(44, 102)">'
+        f'<ellipse cx="0" cy="0" rx="10" ry="5.5" fill="{leaf_col}" transform="rotate(-25)"/>'
+        '</g>'
+        '</g>'
+        '</svg>'
+    )
+
+
 def construir_html_panel_patrimonio(
     total_patrimonio_ars,
     total_patrimonio_usd,
@@ -658,62 +958,55 @@ def construir_html_panel_patrimonio(
     tasa_invalida = hay_moneda_extranjera and (dolar_b is None or float(dolar_b) <= 0)
 
     if tasa_invalida:
-        runway_months = None
         score = 0.5
-        runway_display = "⚠️ Tasa USD/ARS no disponible"
         mensaje_salud = (
-            "⚠️ Advertencia: Se detectaron activos o costos en moneda extranjera (USD) "
-            "pero no hay un tipo de cambio válido para convertir ambos valores a ARS."
+            "⚠️ Advertencia: Se detectaron activos o costos en otra moneda "
+            "pero no hay un tipo de cambio disponible para convertir a ARS."
         )
     elif costo_mensual_ars <= 0:
-        runway_months = None
         score = 1.0 if total_patrimonio_ars > 0 else 0.5
-        runway_display = "Sin costos cargados"
-        mensaje_salud = (
-            "Sin costos cargados: activá o cargá tus costos mensuales en 'Costos e Ingresos' "
-            "para calcular cuántos años y meses podés vivir sin nuevos ingresos."
-        )
+        mensaje_salud = "Sin costos cargados"
     else:
-        runway_months = float(total_patrimonio_ars) / float(costo_mensual_ars)
-        runway_meses_int = max(0, int(round(runway_months)))
-        anios_rw = runway_meses_int // 12
-        meses_rem_rw = runway_meses_int % 12
+        meses_float = float(total_patrimonio_ars) / float(costo_mensual_ars)
+        meses_int = max(0, int(round(meses_float)))
+        anios_s = meses_int // 12
+        meses_rem = meses_int % 12
 
-        if runway_meses_int <= 12:
-            runway_display = f"{runway_meses_int} meses"
+        if meses_int <= 12:
+            tiempo_str = f"{meses_int} meses"
         else:
-            runway_display = f"{anios_rw} años y {meses_rem_rw} meses"
+            tiempo_str = f"{anios_s} años y {meses_rem} meses"
 
-        if runway_months >= 180.0:
+        if meses_float >= 180.0:
             score = 1.0
-        elif runway_months <= 24.0:
+        elif meses_float <= 24.0:
             score = 0.0
         else:
-            score = (runway_months - 24.0) / (180.0 - 24.0)
+            score = (meses_float - 24.0) / (180.0 - 24.0)
 
-        if runway_months >= 180.0:
+        if meses_float >= 180.0:
             mensaje_salud = (
-                f"Estamos muy bien financieramente, te quedan {anios_rw} años y {meses_rem_rw} meses "
+                f"Estamos muy bien financieramente, te quedan {anios_s} años y {meses_rem} meses "
                 f"de vivir sin nuevos ingresos"
             )
-        elif runway_months <= 24.0:
+        elif meses_float <= 24.0:
             mensaje_salud = (
-                f"Estamos en llamas financieramente, te quedan {runway_meses_int} meses "
+                f"Estamos en llamas financieramente, te quedan {tiempo_str} "
                 f"de sobrevivir sin ingresos"
             )
         elif score >= 0.70:
             mensaje_salud = (
-                f"Estamos bien financieramente, con buena reserva: te quedan {runway_display} "
+                f"Estamos bien financieramente, con buena reserva: te quedan {tiempo_str} "
                 f"de vivir sin nuevos ingresos"
             )
         elif score >= 0.40:
             mensaje_salud = (
-                f"Atención financiera: el jardín empieza a secarse, te quedan {runway_display} "
+                f"Atención financiera: el jardín empieza a secarse, te quedan {tiempo_str} "
                 f"de vivir sin nuevos ingresos"
             )
         else:
             mensaje_salud = (
-                f"Alerta financiera: sequía severa en progreso, te quedan apenas {runway_display} "
+                f"Alerta financiera: sequía severa en progreso, te quedan apenas {tiempo_str} "
                 f"de sobrevivir sin nuevos ingresos"
             )
 
@@ -791,21 +1084,18 @@ def construir_html_panel_patrimonio(
         (1.0, "#22C55E")
     ], score)
 
-    # Parámetros físicos continuos para plantas, sol en llamas y rodadoras (tumbleweeds)
     fire_opacity = max(0.0, min(1.0, ((1.0 - score) ** 1.35)))
-    sun_radius = 28.0 + (1.0 - score) * 18.0
+    sun_radius = 26.0 + (1.0 - score) * 16.0
     sun_core_col = _multi_color([(0.0, "#FEF08A"), (0.4, "#FDE047"), (1.0, "#FEF9C3")], score)
     sun_outer_col = _multi_color([(0.0, "#DC2626"), (0.4, "#F97316"), (1.0, "#FBBF24")], score)
     tumbleweed_opacity = max(0.0, min(1.0, (0.38 - score) / 0.38)) if score < 0.38 else 0.0
     cracks_opacity = max(0.0, min(1.0, (0.45 - score) / 0.45)) if score < 0.45 else 0.0
     clouds_opacity = max(0.0, min(0.92, (score - 0.15) / 0.85))
     flowers_opacity = max(0.0, min(1.0, (score - 0.55) / 0.45))
-
-    # Ángulo de caída/marchitamiento de las plantas y escala por umbral
     droop_deg = (1.0 - score) * 34.0
 
     def _plant_style(threshold):
-        if score <= 0.001 or score <= threshold:
+        if score <= 0.02 or score <= threshold:
             return 0.0, 0.0
         sc = max(0.15, min(1.0, (score - threshold) / (1.0 - threshold)))
         op = max(0.0, min(1.0, (score - threshold) / max(0.18, 1.0 - threshold)))
@@ -816,81 +1106,6 @@ def construir_html_panel_patrimonio(
     t3_s, t3_o = _plant_style(0.35)
     t4_s, t4_o = _plant_style(0.52)
     t5_s, t5_o = _plant_style(0.68)
-
-    # Morfología y estado de los personajes (Canguro y Koala) según score
-    ribs_opacity = max(0.0, min(0.95, (0.32 - score) / 0.32)) if score < 0.32 else 0.0
-    fat_scale_x = 0.72 + 0.34 * score  # 1.06 en score=1 (bien alimentado), 0.72 en score=0 (famélico)
-    posture_drop = (1.0 - score) * 14.0
-    ear_droop = (1.0 - score) * 28.0
-
-    if score > 0.65:
-        kanga_anim_class = "jardin-kanga-happy"
-        koala_anim_class = "jardin-koala-happy"
-        mouth_kanga = "M 92 103 Q 100 111 107 102"
-        mouth_koala = "M 1094 114 Q 1102 122 1110 114"
-        eye_state = "happy"
-    elif score > 0.15:
-        kanga_anim_class = "jardin-animal-tired"
-        koala_anim_class = "jardin-animal-tired"
-        mouth_kanga = "M 92 108 Q 100 101 107 108"
-        mouth_koala = "M 1094 120 Q 1102 113 1110 120"
-        eye_state = "sad"
-    else:
-        kanga_anim_class = "jardin-animal-collapse"
-        koala_anim_class = "jardin-animal-collapse"
-        mouth_kanga = "M 91 109 Q 100 100 108 109"
-        mouth_koala = "M 1093 121 Q 1102 112 1111 121"
-        eye_state = "dying"
-
-    # Ojos expresivos según el estado
-    if eye_state == "happy":
-        kanga_eyes_svg = (
-            '<circle cx="96" cy="87" r="4.2" fill="#1F2937"/>'
-            '<circle cx="97.5" cy="85.5" r="1.5" fill="#FFFFFF"/>'
-            '<circle cx="110" cy="87" r="3.8" fill="#1F2937"/>'
-            '<circle cx="111.2" cy="85.5" r="1.3" fill="#FFFFFF"/>'
-        )
-        koala_eyes_svg = (
-            '<circle cx="1090" cy="96" r="4.3" fill="#1F2937"/>'
-            '<circle cx="1091.5" cy="94.5" r="1.5" fill="#FFFFFF"/>'
-            '<circle cx="1114" cy="96" r="4.3" fill="#1F2937"/>'
-            '<circle cx="1115.5" cy="94.5" r="1.5" fill="#FFFFFF"/>'
-            '<ellipse cx="1083" cy="104" rx="5" ry="3" fill="#F472B6" opacity="0.55"/>'
-            '<ellipse cx="1121" cy="104" rx="5" ry="3" fill="#F472B6" opacity="0.55"/>'
-        )
-        tongue_kanga_svg = ""
-        tongue_koala_svg = ""
-    elif eye_state == "sad":
-        kanga_eyes_svg = (
-            '<circle cx="96" cy="89" r="3.8" fill="#1F2937"/>'
-            '<path d="M 90 84 L 101 87" stroke="#451A03" stroke-width="2.2" stroke-linecap="round"/>'
-            '<circle cx="110" cy="89" r="3.5" fill="#1F2937"/>'
-            '<path d="M 105 87 L 115 84" stroke="#451A03" stroke-width="2.2" stroke-linecap="round"/>'
-            '<path d="M 86 95 Q 84 102 86 105 Q 88 102 86 95 Z" fill="#38BDF8" opacity="0.85"/>'
-        )
-        koala_eyes_svg = (
-            '<circle cx="1090" cy="98" r="3.8" fill="#1F2937"/>'
-            '<path d="M 1084 92 L 1095 95" stroke="#1F2937" stroke-width="2.2" stroke-linecap="round"/>'
-            '<circle cx="1114" cy="98" r="3.8" fill="#1F2937"/>'
-            '<path d="M 1109 95 L 1120 92" stroke="#1F2937" stroke-width="2.2" stroke-linecap="round"/>'
-            '<path d="M 1078 104 Q 1076 111 1078 114 Q 1080 111 1078 104 Z" fill="#38BDF8" opacity="0.85"/>'
-        )
-        tongue_kanga_svg = ""
-        tongue_koala_svg = ""
-    else:
-        kanga_eyes_svg = (
-            '<path d="M 92 84 L 99 91 M 99 84 L 92 91" stroke="#1F2937" stroke-width="2.4" stroke-linecap="round"/>'
-            '<path d="M 106 84 L 113 91 M 113 84 L 106 91" stroke="#1F2937" stroke-width="2.4" stroke-linecap="round"/>'
-        )
-        koala_eyes_svg = (
-            '<path d="M 1086 93 L 1094 101 M 1094 93 L 1086 101" stroke="#1F2937" stroke-width="2.4" stroke-linecap="round"/>'
-            '<path d="M 1110 93 L 1118 101 M 1118 93 L 1110 101" stroke="#1F2937" stroke-width="2.4" stroke-linecap="round"/>'
-        )
-        tongue_kanga_svg = '<path d="M 100 106 Q 103 118 98 121 Q 94 119 96 106 Z" fill="#EF4444" stroke="#991B1B" stroke-width="1"/>'
-        tongue_koala_svg = '<path d="M 1102 117 Q 1105 128 1100 130 Q 1096 128 1098 117 Z" fill="#EF4444" stroke="#991B1B" stroke-width="1"/>'
-
-    # Ramita de eucalipto fresca cuando el score es alto vs seca cuando es bajo
-    euca_leaf_op = max(0.0, min(1.0, (score - 0.12) / 0.5))
 
     pct_salud = int(round(score * 100))
     badge_bg = _multi_color([
@@ -905,6 +1120,9 @@ def construir_html_panel_patrimonio(
         (0.75, "#166534"),
         (1.0, "#065F46")
     ], score)
+
+    svg_canguro = _construir_svg_canguro(score)
+    svg_koala = _construir_svg_koala(score)
 
     lineas_html = [
         f'<div class="jardin-health-scene" style="border-color: {border_col};">',
@@ -938,32 +1156,13 @@ def construir_html_panel_patrimonio(
         '<stop offset="45%" stop-color="#92400E"/>',
         '<stop offset="100%" stop-color="#451A03"/>',
         '</linearGradient>',
-        '<radialGradient id="kangaFur3D" cx="35%" cy="30%" r="70%">',
-        '<stop offset="0%" stop-color="#F59E0B"/>',
-        '<stop offset="55%" stop-color="#D97706"/>',
-        '<stop offset="100%" stop-color="#92400E"/>',
-        '</radialGradient>',
-        '<linearGradient id="kangaBelly3D" x1="0%" y1="0%" x2="0%" y2="100%">',
-        '<stop offset="0%" stop-color="#FEF3C7"/>',
-        '<stop offset="100%" stop-color="#FDE68A"/>',
-        '</linearGradient>',
-        '<radialGradient id="koalaFur3D" cx="35%" cy="30%" r="70%">',
-        '<stop offset="0%" stop-color="#9CA3AF"/>',
-        '<stop offset="60%" stop-color="#6B7280"/>',
-        '<stop offset="100%" stop-color="#374151"/>',
-        '</radialGradient>',
-        '<linearGradient id="koalaBelly3D" x1="0%" y1="0%" x2="0%" y2="100%">',
-        '<stop offset="0%" stop-color="#F3F4F6"/>',
-        '<stop offset="100%" stop-color="#D1D5DB"/>',
-        '</linearGradient>',
         '<filter id="softShadow3D" x="-20%" y="-20%" width="140%" height="140%">',
         '<feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#000000" flood-opacity="0.24"/>',
         '</filter>',
         '</defs>',
-        # Cielo de fondo
         '<rect x="0" y="0" width="1200" height="320" fill="url(#skyGrad)"/>',
-        # Sol / Sol en llamas (cuando el score baja)
-        f'<g class="jardin-sun-group" transform="translate(600, {68 + int((1.0 - score) * 18)})">',
+        # Sol / Sol en llamas
+        f'<g class="jardin-sun-group" transform="translate(600, {56 + int((1.0 - score) * 16)})">',
         f'<circle cx="0" cy="0" r="{sun_radius * 2.1:.1f}" fill="url(#sunGrad)" opacity="{0.45 + 0.45 * fire_opacity:.2f}"/>',
         f'<g class="jardin-sun-flames" opacity="{fire_opacity:.2f}">',
         f'<polygon points="0,-{sun_radius*1.65:.1f} 12,-{sun_radius*0.85:.1f} -12,-{sun_radius*0.85:.1f}" fill="#EF4444"/>',
@@ -977,83 +1176,82 @@ def construir_html_panel_patrimonio(
         '</g>',
         f'<circle cx="0" cy="0" r="{sun_radius:.1f}" fill="{sun_core_col}" filter="url(#softShadow3D)"/>',
         '</g>',
-        # Nubes suaves en escenario saludable
+        # Nubes suaves
         f'<g class="jardin-clouds" opacity="{clouds_opacity:.2f}" fill="#FFFFFF">',
-        '<g transform="translate(220, 48)" opacity="0.82">',
-        '<ellipse cx="0" cy="0" rx="36" ry="15"/><ellipse cx="-22" cy="4" rx="22" ry="12"/><ellipse cx="24" cy="4" rx="24" ry="11"/>',
+        '<g transform="translate(310, 44)" opacity="0.82">',
+        '<ellipse cx="0" cy="0" rx="34" ry="14"/><ellipse cx="-20" cy="4" rx="20" ry="11"/><ellipse cx="22" cy="4" rx="22" ry="10"/>',
         '</g>',
-        '<g transform="translate(940, 42)" opacity="0.78">',
-        '<ellipse cx="0" cy="0" rx="40" ry="16"/><ellipse cx="-25" cy="5" rx="24" ry="12"/><ellipse cx="25" cy="5" rx="22" ry="11"/>',
+        '<g transform="translate(890, 40)" opacity="0.78">',
+        '<ellipse cx="0" cy="0" rx="36" ry="15"/><ellipse cx="-22" cy="5" rx="22" ry="11"/><ellipse cx="22" cy="5" rx="20" ry="10"/>',
         '</g>',
         '</g>',
-        # Colinas 3D con parallax y sombras
-        '<path d="M 0 235 Q 190 175 410 220 T 830 210 T 1200 230 L 1200 320 L 0 320 Z" fill="url(#hillBackGrad)" opacity="0.88"/>',
-        '<path d="M 0 255 Q 260 205 560 248 T 1200 245 L 1200 320 L 0 320 Z" fill="url(#hillMidGrad)" opacity="0.95"/>',
+        # Colinas 3D
+        '<path d="M 0 235 Q 220 175 460 220 T 860 210 T 1200 230 L 1200 320 L 0 320 Z" fill="url(#hillBackGrad)" opacity="0.88"/>',
+        '<path d="M 0 255 Q 290 205 580 248 T 1200 245 L 1200 320 L 0 320 Z" fill="url(#hillMidGrad)" opacity="0.95"/>',
         f'<path d="M 0 276 Q 360 252 720 278 T 1200 272 L 1200 320 L 0 320 Z" fill="{ground_front}"/>',
-        # Grietas de sequía en el suelo cuando el score es bajo
+        # Grietas de sequía
         f'<g stroke="#451A03" stroke-width="1.8" fill="none" opacity="{cracks_opacity:.2f}">',
-        '<path d="M 250 286 L 272 296 L 260 310 M 272 296 L 295 302"/>',
-        '<path d="M 520 292 L 548 301 L 535 316 M 548 301 L 575 297"/>',
-        '<path d="M 860 285 L 885 298 L 874 314 M 885 298 L 912 303"/>',
+        '<path d="M 320 286 L 342 296 L 330 310 M 342 296 L 365 302"/>',
+        '<path d="M 560 292 L 588 301 L 575 316 M 588 301 L 615 297"/>',
+        '<path d="M 820 285 L 845 298 L 834 314 M 845 298 L 872 303"/>',
         '</g>',
-        # Bosque / Jardín 3D (se reduce, amarillea y se inclina al bajar el score; desaparece en score=0)
-        f'<g class="jardin-sway-tree" opacity="{t1_o:.2f}" transform="translate(225, 255) scale({t1_s:.2f}) rotate({droop_deg * 0.45:.1f})" filter="url(#softShadow3D)">',
+        # Árboles y plantas (con brisa suave, se reducen e inclinan al bajar el score)
+        f'<g class="jardin-sway-tree" opacity="{t1_o:.2f}" transform="translate(280, 258) scale({t1_s:.2f}) rotate({droop_deg * 0.45:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -7 0 L -4 -68 L 4 -68 L 7 0 Z" fill="url(#trunk3D)"/>',
         '<circle cx="0" cy="-82" r="34" fill="url(#foliage3D)"/>',
         '<circle cx="-22" cy="-68" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="22" cy="-68" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="0" cy="-104" r="24" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-tree-alt" opacity="{t2_o:.2f}" transform="translate(310, 265) scale({t2_s:.2f}) rotate({droop_deg * 0.6:.1f})" filter="url(#softShadow3D)">',
+        f'<g class="jardin-sway-tree-alt" opacity="{t2_o:.2f}" transform="translate(365, 266) scale({t2_s:.2f}) rotate({droop_deg * 0.6:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -5 0 L -3 -52 L 3 -52 L 5 0 Z" fill="url(#trunk3D)"/>',
         '<ellipse cx="0" cy="-64" rx="28" ry="24" fill="url(#foliage3D)"/>',
         '<circle cx="-16" cy="-54" r="18" fill="url(#foliage3D)"/>',
         '<circle cx="16" cy="-54" r="18" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-tree" opacity="{t3_o:.2f}" transform="translate(890, 262) scale({t3_s:.2f}) rotate(-{droop_deg * 0.55:.1f})" filter="url(#softShadow3D)">',
+        f'<g class="jardin-sway-tree" opacity="{t3_o:.2f}" transform="translate(835, 264) scale({t3_s:.2f}) rotate(-{droop_deg * 0.55:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -6 0 L -3 -58 L 3 -58 L 6 0 Z" fill="url(#trunk3D)"/>',
         '<circle cx="0" cy="-72" r="30" fill="url(#foliage3D)"/>',
         '<circle cx="-18" cy="-58" r="22" fill="url(#foliage3D)"/>',
         '<circle cx="18" cy="-58" r="22" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-tree-alt" opacity="{t1_o:.2f}" transform="translate(975, 254) scale({t1_s:.2f}) rotate(-{droop_deg * 0.4:.1f})" filter="url(#softShadow3D)">',
+        f'<g class="jardin-sway-tree-alt" opacity="{t1_o:.2f}" transform="translate(920, 256) scale({t1_s:.2f}) rotate(-{droop_deg * 0.4:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -7 0 L -4 -70 L 4 -70 L 7 0 Z" fill="url(#trunk3D)"/>',
         '<circle cx="0" cy="-86" r="35" fill="url(#foliage3D)"/>',
         '<circle cx="-24" cy="-70" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="24" cy="-70" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="0" cy="-108" r="24" fill="url(#foliage3D)"/>',
         '</g>',
-        # Arbustos y helechos adicionales en niveles altos de salud
-        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(380, 275) scale({t4_s:.2f}) rotate({droop_deg * 0.7:.1f})">',
+        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(425, 276) scale({t4_s:.2f}) rotate({droop_deg * 0.7:.1f})">',
         '<ellipse cx="0" cy="-14" rx="22" ry="15" fill="url(#foliage3D)"/>',
         '<ellipse cx="-14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
         '<ellipse cx="14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(820, 275) scale({t4_s:.2f}) rotate(-{droop_deg * 0.7:.1f})">',
+        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(775, 276) scale({t4_s:.2f}) rotate(-{droop_deg * 0.7:.1f})">',
         '<ellipse cx="0" cy="-14" rx="22" ry="15" fill="url(#foliage3D)"/>',
         '<ellipse cx="-14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
         '<ellipse cx="14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-tree" opacity="{t5_o:.2f}" transform="translate(170, 272) scale({t5_s:.2f})">',
+        f'<g class="jardin-sway-tree" opacity="{t5_o:.2f}" transform="translate(225, 274) scale({t5_s:.2f})">',
         '<ellipse cx="0" cy="-18" rx="24" ry="16" fill="url(#foliage3D)"/>',
         '<circle cx="-12" cy="-24" r="14" fill="url(#foliage3D)"/>',
         '<circle cx="12" cy="-24" r="14" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-tree-alt" opacity="{t5_o:.2f}" transform="translate(1030, 272) scale({t5_s:.2f})">',
+        f'<g class="jardin-sway-tree-alt" opacity="{t5_o:.2f}" transform="translate(975, 274) scale({t5_s:.2f})">',
         '<ellipse cx="0" cy="-18" rx="24" ry="16" fill="url(#foliage3D)"/>',
         '<circle cx="-12" cy="-24" r="14" fill="url(#foliage3D)"/>',
         '<circle cx="12" cy="-24" r="14" fill="url(#foliage3D)"/>',
         '</g>',
-        # Flores vibrantes cuando la salud es alta
+        # Flores
         f'<g opacity="{flowers_opacity:.2f}">',
-        '<circle cx="205" cy="278" r="4.5" fill="#F472B6"/><circle cx="205" cy="278" r="2" fill="#FEF08A"/>',
-        '<circle cx="268" cy="283" r="4.5" fill="#A78BFA"/><circle cx="268" cy="283" r="2" fill="#FEF08A"/>',
-        '<circle cx="348" cy="280" r="4" fill="#FB7185"/><circle cx="348" cy="280" r="1.8" fill="#FEF08A"/>',
-        '<circle cx="855" cy="282" r="4.5" fill="#F472B6"/><circle cx="855" cy="282" r="2" fill="#FEF08A"/>',
-        '<circle cx="935" cy="279" r="4.5" fill="#A78BFA"/><circle cx="935" cy="279" r="2" fill="#FEF08A"/>',
-        '<circle cx="1008" cy="284" r="4" fill="#FBBF24"/><circle cx="1008" cy="284" r="1.8" fill="#FFFFFF"/>',
+        '<circle cx="295" cy="280" r="4.5" fill="#F472B6"/><circle cx="295" cy="280" r="2" fill="#FEF08A"/>',
+        '<circle cx="355" cy="284" r="4.5" fill="#A78BFA"/><circle cx="355" cy="284" r="2" fill="#FEF08A"/>',
+        '<circle cx="410" cy="281" r="4" fill="#FB7185"/><circle cx="410" cy="281" r="1.8" fill="#FEF08A"/>',
+        '<circle cx="795" cy="282" r="4.5" fill="#F472B6"/><circle cx="795" cy="282" r="2" fill="#FEF08A"/>',
+        '<circle cx="865" cy="279" r="4.5" fill="#A78BFA"/><circle cx="865" cy="279" r="2" fill="#FEF08A"/>',
+        '<circle cx="935" cy="284" r="4" fill="#FBBF24"/><circle cx="935" cy="284" r="1.8" fill="#FFFFFF"/>',
         '</g>',
-        # Plantas rodadoras del desierto (Tumbleweeds) rodando por la arena en escenarios críticos
+        # Plantas rodadoras (Tumbleweeds) rodando por el desierto
         f'<g opacity="{tumbleweed_opacity:.2f}">',
         '<g class="jardin-tumbleweed-1">',
         '<circle cx="0" cy="0" r="18" fill="none" stroke="#78350F" stroke-width="2.2" stroke-dasharray="7 4"/>',
@@ -1067,114 +1265,24 @@ def construir_html_panel_patrimonio(
         '<ellipse cx="0" cy="0" rx="14" ry="8" fill="none" stroke="#78350F" stroke-width="1.6" transform="rotate(-40)"/>',
         '</g>',
         '</g>',
-        # =================================================================
-        # PERSONAJE IZQUIERDO: CANGURO 3D ANIMADO
-        # =================================================================
-        '<ellipse cx="95" cy="292" rx="46" ry="10" fill="#000000" opacity="0.22"/>',
-        f'<g class="{kanga_anim_class}" transform="translate(0, {posture_drop:.1f})" filter="url(#softShadow3D)">',
-        # Cola 3D del canguro
-        '<path d="M 58 232 Q 18 242 14 212 Q 12 196 24 198 Q 36 202 64 216 Z" fill="url(#kangaFur3D)"/>',
-        # Pierna trasera y pata grande
-        '<ellipse cx="72" cy="246" rx="20" ry="28" fill="url(#kangaFur3D)"/>',
-        '<path d="M 58 272 L 108 272 Q 116 272 114 280 L 54 280 Q 48 276 58 272 Z" fill="url(#kangaFur3D)"/>',
-        # Torso y panza 3D (se ensancha en score alto y se adelgaza en score bajo)
-        f'<g transform="translate(90, 195) scale({fat_scale_x:.2f}, 1)">',
-        '<ellipse cx="0" cy="0" rx="34" ry="52" fill="url(#kangaFur3D)"/>',
-        '<ellipse cx="6" cy="4" rx="22" ry="40" fill="url(#kangaBelly3D)"/>',
-        '</g>',
-        # Costillas y huesos visibles cuando el score se acerca a 0
-        f'<g opacity="{ribs_opacity:.2f}" stroke="#FEF3C7" stroke-width="2.6" stroke-linecap="round" fill="none">',
-        '<path d="M 76 172 Q 92 168 104 175"/>',
-        '<path d="M 74 184 Q 92 180 105 187"/>',
-        '<path d="M 75 196 Q 92 192 104 199"/>',
-        '<path d="M 77 208 Q 92 204 102 210"/>',
-        '<circle cx="68" cy="242" r="5" fill="#FEF3C7" stroke="none"/>',
-        '<line x1="68" y1="244" x2="88" y2="274" stroke="#FEF3C7" stroke-width="3.2"/>',
-        '</g>',
-        # Cuello y Cabeza 3D del canguro
-        '<path d="M 80 152 L 90 104 L 110 108 L 104 156 Z" fill="url(#kangaFur3D)"/>',
-        # Orejas (erguidas en score alto, caídas en score bajo)
-        f'<ellipse cx="86" cy="64" rx="7" ry="22" fill="url(#kangaFur3D)" transform="rotate({-18 - ear_droop:.1f} 86 78)"/>',
-        f'<ellipse cx="86" cy="64" rx="3.8" ry="15" fill="#FDE68A" transform="rotate({-18 - ear_droop:.1f} 86 78)"/>',
-        f'<ellipse cx="106" cy="64" rx="7" ry="22" fill="url(#kangaFur3D)" transform="rotate({14 + ear_droop:.1f} 106 78)"/>',
-        f'<ellipse cx="106" cy="64" rx="3.8" ry="15" fill="#FDE68A" transform="rotate({14 + ear_droop:.1f} 106 78)"/>',
-        '<ellipse cx="99" cy="94" rx="22" ry="19" fill="url(#kangaFur3D)"/>',
-        '<ellipse cx="112" cy="98" rx="12" ry="10" fill="url(#kangaBelly3D)"/>',
-        '<circle cx="120" cy="95" r="4.5" fill="#1F2937"/>',
-        kanga_eyes_svg,
-        tongue_kanga_svg,
-        f'<path d="{mouth_kanga}" stroke="#451A03" stroke-width="2.3" fill="none" stroke-linecap="round"/>',
-        # Brazos y ramita de trébol/eucalipto
-        '<path d="M 96 164 Q 122 174 128 186" stroke="#D97706" stroke-width="8" stroke-linecap="round" fill="none"/>',
-        f'<g opacity="{euca_leaf_op:.2f}" transform="translate(128, 184)">',
-        f'<path d="M 0 0 Q 16 -14 26 -24" stroke="#15803D" stroke-width="2.5" fill="none"/>',
-        f'<ellipse cx="14" cy="-14" rx="8" ry="4.5" fill="{leaf_light}" transform="rotate(-30 14 -14)"/>',
-        f'<ellipse cx="24" cy="-22" rx="8" ry="4.5" fill="{leaf_main}" transform="rotate(20 24 -22)"/>',
-        '</g>',
-        '</g>',
-        # =================================================================
-        # PERSONAJE DERECHO: KOALA 3D ANIMADO
-        # =================================================================
-        '<ellipse cx="1102" cy="292" rx="44" ry="10" fill="#000000" opacity="0.22"/>',
-        # Tronco de eucalipto del Koala
-        '<path d="M 1136 296 L 1144 125 L 1160 125 L 1154 296 Z" fill="url(#trunk3D)" filter="url(#softShadow3D)"/>',
-        '<path d="M 1146 165 Q 1115 145 1085 152" stroke="#78350F" stroke-width="8" stroke-linecap="round" fill="none"/>',
-        f'<g class="{koala_anim_class}" transform="translate(0, {posture_drop:.1f})" filter="url(#softShadow3D)">',
-        # Cuerpo 3D del Koala (se ensancha en score alto y se adelgaza en score bajo)
-        f'<g transform="translate(1102, 202) scale({fat_scale_x:.2f}, 1)">',
-        '<ellipse cx="0" cy="0" rx="38" ry="46" fill="url(#koalaFur3D)"/>',
-        '<ellipse cx="-2" cy="6" rx="25" ry="34" fill="url(#koalaBelly3D)"/>',
-        '</g>',
-        # Costillas y huesos visibles en el Koala cuando el score se acerca a 0
-        f'<g opacity="{ribs_opacity:.2f}" stroke="#F3F4F6" stroke-width="2.6" stroke-linecap="round" fill="none">',
-        '<path d="M 1086 182 Q 1102 177 1118 182"/>',
-        '<path d="M 1084 194 Q 1102 189 1120 194"/>',
-        '<path d="M 1085 206 Q 1102 201 1119 206"/>',
-        '<path d="M 1088 218 Q 1102 213 1116 218"/>',
-        '<circle cx="1078" cy="242" r="4.5" fill="#F3F4F6" stroke="none"/>',
-        '<line x1="1078" y1="242" x2="1096" y2="266" stroke="#F3F4F6" stroke-width="3"/>',
-        '</g>',
-        # Patas y brazos del Koala
-        '<ellipse cx="1076" cy="242" rx="14" ry="18" fill="url(#koalaFur3D)"/>',
-        '<ellipse cx="1126" cy="242" rx="14" ry="18" fill="url(#koalaFur3D)"/>',
-        '<ellipse cx="1072" cy="176" rx="13" ry="11" fill="url(#koalaFur3D)"/>',
-        '<ellipse cx="1132" cy="176" rx="13" ry="11" fill="url(#koalaFur3D)"/>',
-        # Orejas redondas peludas del Koala
-        f'<circle cx="1068" cy="{82 + int(ear_droop * 0.35)}" r="18" fill="url(#koalaFur3D)"/>',
-        f'<circle cx="1068" cy="{82 + int(ear_droop * 0.35)}" r="10" fill="#E5E7EB"/>',
-        f'<circle cx="1136" cy="{82 + int(ear_droop * 0.35)}" r="18" fill="url(#koalaFur3D)"/>',
-        f'<circle cx="1136" cy="{82 + int(ear_droop * 0.35)}" r="10" fill="#E5E7EB"/>',
-        # Cabeza y nariz icónica 3D del Koala
-        '<ellipse cx="1102" cy="100" rx="32" ry="27" fill="url(#koalaFur3D)"/>',
-        '<ellipse cx="1102" cy="102" rx="9" ry="13" fill="#1F2937"/>',
-        '<ellipse cx="1099" cy="98" rx="3" ry="4.5" fill="#4B5563"/>',
-        koala_eyes_svg,
-        tongue_koala_svg,
-        f'<path d="{mouth_koala}" stroke="#1F2937" stroke-width="2.3" fill="none" stroke-linecap="round"/>',
-        # Hojita de eucalipto en la mano del Koala
-        f'<g opacity="{euca_leaf_op:.2f}" transform="translate(1062, 168)">',
-        f'<ellipse cx="0" cy="0" rx="11" ry="6" fill="{leaf_light}" transform="rotate(-25)"/>',
-        '</g>',
-        '</g>',
         '</svg>',
-        # Contenido central legible con efecto cristal (glassmorphism) sobre la escena 3D
+        # Personaje izquierdo (Canguro) posicionado absolutamente DENTRO del panel con overflow: visible
+        f'<div class="jardin-char-wrap jardin-char-left">{svg_canguro}</div>',
+        # Contenido central con el nuevo orden solicitado
         '<div class="jardin-health-overlay">',
-        '<div class="kpi-title" style="font-size: 1.28rem; color: #1F2937;">Patrimonio Total</div>',
-        f'<div class="kpi-value" style="font-size: 2.35rem; color: #111827;">{total_patrimonio_ars:,.0f} ARS</div>',
-        f'<div class="kpi-usd" style="font-size: 1.18rem; color: #1F2937; background: rgba(255,255,255,0.88);">{total_patrimonio_usd:,.2f} USD</div>',
-        f'<div class="kpi-sub" style="color: #374151; font-weight: 700;">{cant_activos_contemplados} activos de {cant_activos_totales} contemplados</div>',
-        f'<div class="jardin-runway-box" style="background: {badge_bg}; color: {badge_text}; border-color: {border_col};">',
-        f'<div style="font-size: 1.12rem; font-weight: 800; margin-bottom: 3px;">⏱️ Autonomía Financiera (Runway): {runway_display}</div>',
-        f'<div style="font-size: 0.88rem; font-weight: 700; opacity: 0.92; margin-bottom: 5px;">'
-        f'Patrimonio: {total_patrimonio_ars:,.0f} ARS &nbsp;÷&nbsp; Costo mensual de vida: {costo_mensual_ars:,.0f} ARS '
-        f'(Tasa aplicada: 1 USD = {dolar_b:,.0f} ARS)'
-        f'</div>',
-        f'<div style="font-size: 0.98rem; font-weight: 800; line-height: 1.35;">{mensaje_salud}</div>',
+        '<div class="kpi-title" style="font-size: 1.22rem; color: #1F2937;">Patrimonio Total</div>',
+        f'<div class="kpi-value" style="font-size: 2.15rem; color: #111827;">{total_patrimonio_ars:,.0f} ARS</div>',
+        f'<div class="kpi-usd" style="font-size: 1.12rem; color: #1F2937; background: rgba(255,255,255,0.9);">{total_patrimonio_usd:,.2f} USD</div>',
+        f'<div class="jardin-status-box" style="background: {badge_bg}; color: {badge_text}; border-color: {border_col};">',
+        f'<div style="font-size: 0.95rem; font-weight: 800; line-height: 1.35;">{mensaje_salud}</div>',
         '<div class="jardin-health-bar-track">',
         f'<div class="jardin-health-bar-fill" style="width: {pct_salud}%; background: {border_col};"></div>',
         '</div>',
         '</div>',
+        f'<div class="kpi-sub" style="color: #374151; font-weight: 700; margin-top: 8px; margin-bottom: 0;">{cant_activos_contemplados} activos de {cant_activos_totales} contemplados</div>',
         '</div>',
+        # Personaje derecho (Koala) posicionado absolutamente DENTRO del panel con overflow: visible
+        f'<div class="jardin-char-wrap jardin-char-right">{svg_koala}</div>',
         '</div>'
     ]
     return "\n".join(lineas_html)
@@ -2473,19 +2581,23 @@ st.markdown("""
         cursor: default !important;
     }
 
-    /* Escena animada 3D de Salud Financiera (Patrimonio Total y Runway) */
+    /* Escena animada 3D de Salud Financiera (ancho reducido a la mitad, centrada, personajes sin recorte) */
     .jardin-health-scene {
         position: relative;
+        width: 50%;
+        max-width: 50%;
+        min-width: 340px;
+        margin: 0 auto 1.1rem auto;
         border-radius: 22px;
         border: 3px solid #22C55E;
         overflow: hidden;
-        margin-bottom: 1.1rem;
         box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14), inset 0 2px 8px rgba(255, 255, 255, 0.35);
-        min-height: 290px;
+        min-height: 270px;
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 18px 175px;
+        padding: 16px 118px;
+        box-sizing: border-box;
     }
     .jardin-scene-svg {
         position: absolute;
@@ -2495,34 +2607,56 @@ st.markdown("""
         z-index: 1;
         pointer-events: none;
     }
+    .jardin-char-wrap {
+        position: absolute;
+        bottom: 6px;
+        width: 108px;
+        height: 155px;
+        z-index: 3;
+        pointer-events: none;
+        overflow: visible !important;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+    }
+    .jardin-char-left {
+        left: 8px;
+    }
+    .jardin-char-right {
+        right: 8px;
+    }
+    .jardin-char-svg {
+        width: 100%;
+        height: 100%;
+        overflow: visible !important;
+    }
     .jardin-health-overlay {
         position: relative;
         z-index: 2;
-        background: rgba(255, 255, 255, 0.84);
+        background: rgba(255, 255, 255, 0.86);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
-        border: 1.5px solid rgba(255, 255, 255, 0.92);
+        border: 1.5px solid rgba(255, 255, 255, 0.94);
         border-radius: 18px;
-        padding: 14px 24px;
+        padding: 12px 18px;
         text-align: center;
-        max-width: 680px;
         width: 100%;
         box-shadow: 0 8px 24px rgba(17, 24, 39, 0.12);
     }
-    .jardin-runway-box {
-        margin-top: 10px;
-        padding: 10px 14px;
-        border-radius: 13px;
+    .jardin-status-box {
+        margin-top: 8px;
+        padding: 9px 12px;
+        border-radius: 12px;
         border: 1.5px solid;
         box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
     }
     .jardin-health-bar-track {
         width: 100%;
-        height: 8px;
-        background: rgba(255, 255, 255, 0.75);
+        height: 7px;
+        background: rgba(255, 255, 255, 0.78);
         border-radius: 999px;
         overflow: hidden;
-        margin-top: 7px;
+        margin-top: 6px;
         border: 1px solid rgba(0,0,0,0.08);
     }
     .jardin-health-bar-fill {
@@ -2531,27 +2665,18 @@ st.markdown("""
         transition: width 0.5s ease;
     }
 
-    @keyframes jardinTreeSway {
-        0%, 100% { transform: translateY(0px) rotate(0deg); }
-        50% { transform: translateY(-2px) rotate(2.2deg); }
-    }
     @keyframes jardinKangaBounce {
         0%, 100% { transform: translateY(0px) scaleY(1); }
-        45% { transform: translateY(-10px) scaleY(1.03); }
-        55% { transform: translateY(-10px) scaleY(1.03); }
+        45% { transform: translateY(-9px) scaleY(1.03); }
+        55% { transform: translateY(-9px) scaleY(1.03); }
     }
     @keyframes jardinKoalaSway {
         0%, 100% { transform: translateY(0px) rotate(0deg); }
         50% { transform: translateY(-4px) rotate(-2.5deg); }
     }
     @keyframes jardinTiredBreath {
-        0%, 100% { transform: translateY(8px) scaleY(0.98); }
-        50% { transform: translateY(11px) scaleY(0.95); }
-    }
-    @keyframes jardinCollapseTremble {
-        0%, 100% { transform: translateY(16px) rotate(-4deg); }
-        25% { transform: translateY(17px) rotate(-5.2deg); }
-        75% { transform: translateY(16px) rotate(-2.8deg); }
+        0%, 100% { transform: translateY(6px) scaleY(0.98); }
+        50% { transform: translateY(9px) scaleY(0.95); }
     }
     @keyframes jardinSunFireSpin {
         0% { transform: rotate(0deg) scale(1); }
@@ -2570,21 +2695,36 @@ st.markdown("""
         50% { transform: translate(640px, 270px) rotate(360deg); }
         100% { transform: translate(990px, 284px) rotate(720deg); }
     }
+    @keyframes jardinFlyBuzz1 {
+        0% { transform: translate(65px, 78px) rotate(0deg); }
+        25% { transform: translate(82px, 66px) rotate(25deg); }
+        50% { transform: translate(98px, 80px) rotate(-15deg); }
+        75% { transform: translate(76px, 90px) rotate(20deg); }
+        100% { transform: translate(65px, 78px) rotate(0deg); }
+    }
+    @keyframes jardinFlyBuzz2 {
+        0% { transform: translate(112px, 86px) rotate(0deg); }
+        33% { transform: translate(96px, 72px) rotate(-25deg); }
+        66% { transform: translate(124px, 74px) rotate(18deg); }
+        100% { transform: translate(112px, 86px) rotate(0deg); }
+    }
+    @keyframes jardinFlyBuzz3 {
+        0% { transform: translate(44px, 90px) rotate(0deg); }
+        33% { transform: translate(58px, 76px) rotate(22deg); }
+        66% { transform: translate(36px, 78px) rotate(-20deg); }
+        100% { transform: translate(44px, 90px) rotate(0deg); }
+    }
 
     .jardin-kanga-happy {
         animation: jardinKangaBounce 2.4s ease-in-out infinite;
-        transform-origin: 95px 280px;
+        transform-origin: 82px 195px;
     }
     .jardin-koala-happy {
         animation: jardinKoalaSway 2.8s ease-in-out infinite;
-        transform-origin: 1102px 240px;
+        transform-origin: 80px 180px;
     }
     .jardin-animal-tired {
         animation: jardinTiredBreath 3.4s ease-in-out infinite;
-        transform-origin: center bottom;
-    }
-    .jardin-animal-collapse {
-        animation: jardinCollapseTremble 1.6s ease-in-out infinite;
         transform-origin: center bottom;
     }
     .jardin-sun-flames {
@@ -2596,26 +2736,64 @@ st.markdown("""
     .jardin-tumbleweed-2 {
         animation: jardinTumbleweedRoll2 9.5s linear infinite;
     }
+    .jardin-fly-1 {
+        animation: jardinFlyBuzz1 1.3s ease-in-out infinite;
+    }
+    .jardin-fly-2 {
+        animation: jardinFlyBuzz2 1.1s ease-in-out infinite;
+    }
+    .jardin-fly-3 {
+        animation: jardinFlyBuzz3 1.5s ease-in-out infinite;
+    }
 
     @media (prefers-reduced-motion: reduce) {
         .jardin-kanga-happy,
         .jardin-koala-happy,
         .jardin-animal-tired,
-        .jardin-animal-collapse,
         .jardin-sun-flames,
         .jardin-tumbleweed-1,
-        .jardin-tumbleweed-2 {
+        .jardin-tumbleweed-2,
+        .jardin-fly-1,
+        .jardin-fly-2,
+        .jardin-fly-3 {
             animation: none !important;
+        }
+    }
+
+    @media (max-width: 960px) {
+        .jardin-health-scene {
+            width: 85% !important;
+            max-width: 85% !important;
+            padding: 14px 96px !important;
+        }
+        .jardin-char-wrap {
+            width: 88px !important;
+            height: 130px !important;
+            bottom: 4px !important;
         }
     }
 
     @media (max-width: 768px) {
         .jardin-health-scene {
-            padding: 14px 12px !important;
-            min-height: 320px !important;
+            width: 96% !important;
+            max-width: 96% !important;
+            min-width: 280px !important;
+            padding: 14px 76px !important;
+            min-height: 260px !important;
+        }
+        .jardin-char-wrap {
+            width: 70px !important;
+            height: 108px !important;
+            bottom: 4px !important;
+        }
+        .jardin-char-left {
+            left: 4px !important;
+        }
+        .jardin-char-right {
+            right: 4px !important;
         }
         .jardin-health-overlay {
-            padding: 12px 14px !important;
+            padding: 10px 12px !important;
             background: rgba(255, 255, 255, 0.88) !important;
         }
         .block-container {
