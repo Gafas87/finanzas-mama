@@ -1085,7 +1085,7 @@ def construir_html_panel_patrimonio(
     ], score)
 
     fire_opacity = max(0.0, min(1.0, ((1.0 - score) ** 1.35)))
-    sun_radius = 26.0 + (1.0 - score) * 16.0
+    sun_radius = 16.0 + (1.0 - score) * 10.0
     sun_core_col = _multi_color([(0.0, "#FEF08A"), (0.4, "#FDE047"), (1.0, "#FEF9C3")], score)
     sun_outer_col = _multi_color([(0.0, "#DC2626"), (0.4, "#F97316"), (1.0, "#FBBF24")], score)
     tumbleweed_opacity = max(0.0, min(1.0, (0.38 - score) / 0.38)) if score < 0.38 else 0.0
@@ -1099,7 +1099,7 @@ def construir_html_panel_patrimonio(
             return 0.0, 0.0
         sc = max(0.15, min(1.0, (score - threshold) / (1.0 - threshold)))
         op = max(0.0, min(1.0, (score - threshold) / max(0.18, 1.0 - threshold)))
-        return sc, op
+        return sc * 0.62, op
 
     t1_s, t1_o = _plant_style(0.04)
     t2_s, t2_o = _plant_style(0.18)
@@ -1126,27 +1126,42 @@ def construir_html_panel_patrimonio(
 
     lineas_html = [
         f'<div class="jardin-health-scene" style="border-color: {border_col};">',
-        f'<svg class="jardin-scene-svg" viewBox="0 0 1200 320" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">',
+        # 1) PANEL DE INFORMACIÓN (IZQUIERDA, 32% EN ESCRITORIO, ALINEADO AL BORDE IZQUIERDO)
+        f'<div class="jardin-info-panel" style="border-right-color: {border_col};">',
+        '<div class="kpi-title" style="font-size: 1.05rem; color: #1F2937; margin-bottom: 1px;">Patrimonio Total</div>',
+        f'<div class="kpi-value" style="font-size: 1.72rem; color: #111827; line-height: 1.12;">{total_patrimonio_ars:,.0f} ARS</div>',
+        f'<div class="kpi-usd" style="font-size: 0.96rem; color: #1F2937; background: rgba(255,255,255,0.92); margin-top: 3px; padding: 2px 9px;">{total_patrimonio_usd:,.2f} USD</div>',
+        f'<div class="jardin-status-box" style="background: {badge_bg}; color: {badge_text}; border-color: {border_col};">',
+        f'<div style="font-size: 0.84rem; font-weight: 800; line-height: 1.25;">{mensaje_salud}</div>',
+        '<div class="jardin-health-bar-track">',
+        f'<div class="jardin-health-bar-fill" style="width: {pct_salud}%; background: {border_col};"></div>',
+        '</div>',
+        '</div>',
+        f'<div class="kpi-sub" style="color: #374151; font-weight: 700; font-size: 0.82rem; margin-top: 5px; margin-bottom: 0;">{cant_activos_contemplados} activos de {cant_activos_totales} contemplados</div>',
+        '</div>',
+        # 2) PANEL DE ESCENA ANIMADA (DERECHA, 68% RESTANTE, CONTIGUO Y SIN ESPACIO INTERMEDIO)
+        '<div class="jardin-scene-panel">',
+        '<svg class="jardin-scene-svg" viewBox="0 0 900 160" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">',
         '<defs>',
-        f'<linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">',
+        '<linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">',
         f'<stop offset="0%" stop-color="{sky_top}"/>',
         f'<stop offset="55%" stop-color="{sky_mid}"/>',
         f'<stop offset="100%" stop-color="{sky_bot}"/>',
         '</linearGradient>',
-        f'<radialGradient id="sunGrad" cx="50%" cy="50%" r="50%">',
+        '<radialGradient id="sunGrad" cx="50%" cy="50%" r="50%">',
         f'<stop offset="0%" stop-color="{sun_core_col}"/>',
         f'<stop offset="65%" stop-color="{sun_outer_col}"/>',
         f'<stop offset="100%" stop-color="{sun_outer_col}" stop-opacity="0"/>',
         '</radialGradient>',
-        f'<linearGradient id="hillBackGrad" x1="0%" y1="0%" x2="0%" y2="100%">',
+        '<linearGradient id="hillBackGrad" x1="0%" y1="0%" x2="0%" y2="100%">',
         f'<stop offset="0%" stop-color="{hill_back}"/>',
         f'<stop offset="100%" stop-color="{ground_front}"/>',
         '</linearGradient>',
-        f'<linearGradient id="hillMidGrad" x1="0%" y1="0%" x2="0%" y2="100%">',
+        '<linearGradient id="hillMidGrad" x1="0%" y1="0%" x2="0%" y2="100%">',
         f'<stop offset="0%" stop-color="{hill_mid}"/>',
         f'<stop offset="100%" stop-color="{ground_front}"/>',
         '</linearGradient>',
-        f'<linearGradient id="foliage3D" x1="20%" y1="0%" x2="80%" y2="100%">',
+        '<linearGradient id="foliage3D" x1="20%" y1="0%" x2="80%" y2="100%">',
         f'<stop offset="0%" stop-color="{leaf_light}"/>',
         f'<stop offset="55%" stop-color="{leaf_main}"/>',
         f'<stop offset="100%" stop-color="{leaf_dark}"/>',
@@ -1157,18 +1172,18 @@ def construir_html_panel_patrimonio(
         '<stop offset="100%" stop-color="#451A03"/>',
         '</linearGradient>',
         '<filter id="softShadow3D" x="-20%" y="-20%" width="140%" height="140%">',
-        '<feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#000000" flood-opacity="0.24"/>',
+        '<feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.24"/>',
         '</filter>',
         '</defs>',
-        '<rect x="0" y="0" width="1200" height="320" fill="url(#skyGrad)"/>',
-        # Sol / Sol en llamas
-        f'<g class="jardin-sun-group" transform="translate(600, {56 + int((1.0 - score) * 16)})">',
+        '<rect x="0" y="0" width="900" height="160" fill="url(#skyGrad)"/>',
+        # Sol / Sol en llamas totalmente visible en el cielo del panel derecho
+        f'<g class="jardin-sun-group" transform="translate(450, {34 + int((1.0 - score) * 10)})">',
         f'<circle cx="0" cy="0" r="{sun_radius * 2.1:.1f}" fill="url(#sunGrad)" opacity="{0.45 + 0.45 * fire_opacity:.2f}"/>',
         f'<g class="jardin-sun-flames" opacity="{fire_opacity:.2f}">',
-        f'<polygon points="0,-{sun_radius*1.65:.1f} 12,-{sun_radius*0.85:.1f} -12,-{sun_radius*0.85:.1f}" fill="#EF4444"/>',
-        f'<polygon points="0,{sun_radius*1.65:.1f} 12,{sun_radius*0.85:.1f} -12,{sun_radius*0.85:.1f}" fill="#EF4444"/>',
-        f'<polygon points="-{sun_radius*1.65:.1f},0 -{sun_radius*0.85:.1f},12 -{sun_radius*0.85:.1f},-12" fill="#F97316"/>',
-        f'<polygon points="{sun_radius*1.65:.1f},0 {sun_radius*0.85:.1f},12 {sun_radius*0.85:.1f},-12" fill="#F97316"/>',
+        f'<polygon points="0,-{sun_radius*1.65:.1f} 8,-{sun_radius*0.85:.1f} -8,-{sun_radius*0.85:.1f}" fill="#EF4444"/>',
+        f'<polygon points="0,{sun_radius*1.65:.1f} 8,{sun_radius*0.85:.1f} -8,{sun_radius*0.85:.1f}" fill="#EF4444"/>',
+        f'<polygon points="-{sun_radius*1.65:.1f},0 -{sun_radius*0.85:.1f},8 -{sun_radius*0.85:.1f},-8" fill="#F97316"/>',
+        f'<polygon points="{sun_radius*1.65:.1f},0 {sun_radius*0.85:.1f},8 {sun_radius*0.85:.1f},-8" fill="#F97316"/>',
         f'<polygon points="-{sun_radius*1.2:.1f},-{sun_radius*1.2:.1f} -{sun_radius*0.5:.1f},-{sun_radius*0.9:.1f} -{sun_radius*0.9:.1f},-{sun_radius*0.5:.1f}" fill="#DC2626"/>',
         f'<polygon points="{sun_radius*1.2:.1f},-{sun_radius*1.2:.1f} {sun_radius*0.5:.1f},-{sun_radius*0.9:.1f} {sun_radius*0.9:.1f},-{sun_radius*0.5:.1f}" fill="#DC2626"/>',
         f'<polygon points="-{sun_radius*1.2:.1f},{sun_radius*1.2:.1f} -{sun_radius*0.5:.1f},{sun_radius*0.9:.1f} -{sun_radius*0.9:.1f},{sun_radius*0.5:.1f}" fill="#F59E0B"/>',
@@ -1178,111 +1193,105 @@ def construir_html_panel_patrimonio(
         '</g>',
         # Nubes suaves
         f'<g class="jardin-clouds" opacity="{clouds_opacity:.2f}" fill="#FFFFFF">',
-        '<g transform="translate(310, 44)" opacity="0.82">',
+        '<g transform="translate(230, 26) scale(0.75)" opacity="0.82">',
         '<ellipse cx="0" cy="0" rx="34" ry="14"/><ellipse cx="-20" cy="4" rx="20" ry="11"/><ellipse cx="22" cy="4" rx="22" ry="10"/>',
         '</g>',
-        '<g transform="translate(890, 40)" opacity="0.78">',
+        '<g transform="translate(670, 24) scale(0.75)" opacity="0.78">',
         '<ellipse cx="0" cy="0" rx="36" ry="15"/><ellipse cx="-22" cy="5" rx="22" ry="11"/><ellipse cx="22" cy="5" rx="20" ry="10"/>',
         '</g>',
         '</g>',
-        # Colinas 3D
-        '<path d="M 0 235 Q 220 175 460 220 T 860 210 T 1200 230 L 1200 320 L 0 320 Z" fill="url(#hillBackGrad)" opacity="0.88"/>',
-        '<path d="M 0 255 Q 290 205 580 248 T 1200 245 L 1200 320 L 0 320 Z" fill="url(#hillMidGrad)" opacity="0.95"/>',
-        f'<path d="M 0 276 Q 360 252 720 278 T 1200 272 L 1200 320 L 0 320 Z" fill="{ground_front}"/>',
+        # Colinas 3D escaladas a la nueva altura
+        '<path d="M 0 118 Q 180 86 360 110 T 660 104 T 900 116 L 900 160 L 0 160 Z" fill="url(#hillBackGrad)" opacity="0.88"/>',
+        '<path d="M 0 128 Q 220 102 450 124 T 900 122 L 900 160 L 0 160 Z" fill="url(#hillMidGrad)" opacity="0.95"/>',
+        f'<path d="M 0 138 Q 270 126 540 139 T 900 136 L 900 160 L 0 160 Z" fill="{ground_front}"/>',
         # Grietas de sequía
-        f'<g stroke="#451A03" stroke-width="1.8" fill="none" opacity="{cracks_opacity:.2f}">',
-        '<path d="M 320 286 L 342 296 L 330 310 M 342 296 L 365 302"/>',
-        '<path d="M 560 292 L 588 301 L 575 316 M 588 301 L 615 297"/>',
-        '<path d="M 820 285 L 845 298 L 834 314 M 845 298 L 872 303"/>',
+        f'<g stroke="#451A03" stroke-width="1.5" fill="none" opacity="{cracks_opacity:.2f}">',
+        '<path d="M 220 143 L 238 149 L 228 156 M 238 149 L 256 152"/>',
+        '<path d="M 430 146 L 452 151 L 442 158 M 452 151 L 474 149"/>',
+        '<path d="M 640 143 L 660 150 L 650 157 M 660 150 L 682 153"/>',
         '</g>',
-        # Árboles y plantas (con brisa suave, se reducen e inclinan al bajar el score)
-        f'<g class="jardin-sway-tree" opacity="{t1_o:.2f}" transform="translate(280, 258) scale({t1_s:.2f}) rotate({droop_deg * 0.45:.1f})" filter="url(#softShadow3D)">',
+        # Árboles y plantas proporcionales a la nueva altura (distribuidos a lo largo del panel de escena)
+        f'<g class="jardin-sway-tree" opacity="{t1_o:.2f}" transform="translate(185, 132) scale({t1_s:.2f}) rotate({droop_deg * 0.45:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -7 0 L -4 -68 L 4 -68 L 7 0 Z" fill="url(#trunk3D)"/>',
         '<circle cx="0" cy="-82" r="34" fill="url(#foliage3D)"/>',
         '<circle cx="-22" cy="-68" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="22" cy="-68" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="0" cy="-104" r="24" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-tree-alt" opacity="{t2_o:.2f}" transform="translate(365, 266) scale({t2_s:.2f}) rotate({droop_deg * 0.6:.1f})" filter="url(#softShadow3D)">',
+        f'<g class="jardin-sway-tree-alt" opacity="{t2_o:.2f}" transform="translate(265, 136) scale({t2_s:.2f}) rotate({droop_deg * 0.6:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -5 0 L -3 -52 L 3 -52 L 5 0 Z" fill="url(#trunk3D)"/>',
         '<ellipse cx="0" cy="-64" rx="28" ry="24" fill="url(#foliage3D)"/>',
         '<circle cx="-16" cy="-54" r="18" fill="url(#foliage3D)"/>',
         '<circle cx="16" cy="-54" r="18" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-tree" opacity="{t3_o:.2f}" transform="translate(835, 264) scale({t3_s:.2f}) rotate(-{droop_deg * 0.55:.1f})" filter="url(#softShadow3D)">',
+        f'<g class="jardin-sway-tree" opacity="{t3_o:.2f}" transform="translate(365, 134) scale({t3_s:.2f}) rotate({droop_deg * 0.5:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -6 0 L -3 -58 L 3 -58 L 6 0 Z" fill="url(#trunk3D)"/>',
         '<circle cx="0" cy="-72" r="30" fill="url(#foliage3D)"/>',
         '<circle cx="-18" cy="-58" r="22" fill="url(#foliage3D)"/>',
         '<circle cx="18" cy="-58" r="22" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-tree-alt" opacity="{t1_o:.2f}" transform="translate(920, 256) scale({t1_s:.2f}) rotate(-{droop_deg * 0.4:.1f})" filter="url(#softShadow3D)">',
+        f'<g class="jardin-sway-tree-alt" opacity="{t3_o:.2f}" transform="translate(535, 134) scale({t3_s:.2f}) rotate(-{droop_deg * 0.55:.1f})" filter="url(#softShadow3D)">',
+        '<path d="M -6 0 L -3 -58 L 3 -58 L 6 0 Z" fill="url(#trunk3D)"/>',
+        '<circle cx="0" cy="-72" r="30" fill="url(#foliage3D)"/>',
+        '<circle cx="-18" cy="-58" r="22" fill="url(#foliage3D)"/>',
+        '<circle cx="18" cy="-58" r="22" fill="url(#foliage3D)"/>',
+        '</g>',
+        f'<g class="jardin-sway-tree" opacity="{t2_o:.2f}" transform="translate(635, 136) scale({t2_s:.2f}) rotate(-{droop_deg * 0.6:.1f})" filter="url(#softShadow3D)">',
+        '<path d="M -5 0 L -3 -52 L 3 -52 L 5 0 Z" fill="url(#trunk3D)"/>',
+        '<ellipse cx="0" cy="-64" rx="28" ry="24" fill="url(#foliage3D)"/>',
+        '<circle cx="-16" cy="-54" r="18" fill="url(#foliage3D)"/>',
+        '<circle cx="16" cy="-54" r="18" fill="url(#foliage3D)"/>',
+        '</g>',
+        f'<g class="jardin-sway-tree-alt" opacity="{t1_o:.2f}" transform="translate(715, 132) scale({t1_s:.2f}) rotate(-{droop_deg * 0.4:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -7 0 L -4 -70 L 4 -70 L 7 0 Z" fill="url(#trunk3D)"/>',
         '<circle cx="0" cy="-86" r="35" fill="url(#foliage3D)"/>',
         '<circle cx="-24" cy="-70" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="24" cy="-70" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="0" cy="-108" r="24" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(425, 276) scale({t4_s:.2f}) rotate({droop_deg * 0.7:.1f})">',
+        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(315, 140) scale({t4_s:.2f}) rotate({droop_deg * 0.7:.1f})">',
         '<ellipse cx="0" cy="-14" rx="22" ry="15" fill="url(#foliage3D)"/>',
         '<ellipse cx="-14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
         '<ellipse cx="14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(775, 276) scale({t4_s:.2f}) rotate(-{droop_deg * 0.7:.1f})">',
+        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(450, 141) scale({t5_s:.2f}) rotate({droop_deg * 0.5:.1f})">',
+        '<ellipse cx="0" cy="-16" rx="25" ry="16" fill="url(#foliage3D)"/>',
+        '<ellipse cx="-15" cy="-11" rx="17" ry="12" fill="url(#foliage3D)"/>',
+        '<ellipse cx="15" cy="-11" rx="17" ry="12" fill="url(#foliage3D)"/>',
+        '</g>',
+        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(585, 140) scale({t4_s:.2f}) rotate(-{droop_deg * 0.7:.1f})">',
         '<ellipse cx="0" cy="-14" rx="22" ry="15" fill="url(#foliage3D)"/>',
         '<ellipse cx="-14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
         '<ellipse cx="14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
-        '</g>',
-        f'<g class="jardin-sway-tree" opacity="{t5_o:.2f}" transform="translate(225, 274) scale({t5_s:.2f})">',
-        '<ellipse cx="0" cy="-18" rx="24" ry="16" fill="url(#foliage3D)"/>',
-        '<circle cx="-12" cy="-24" r="14" fill="url(#foliage3D)"/>',
-        '<circle cx="12" cy="-24" r="14" fill="url(#foliage3D)"/>',
-        '</g>',
-        f'<g class="jardin-sway-tree-alt" opacity="{t5_o:.2f}" transform="translate(975, 274) scale({t5_s:.2f})">',
-        '<ellipse cx="0" cy="-18" rx="24" ry="16" fill="url(#foliage3D)"/>',
-        '<circle cx="-12" cy="-24" r="14" fill="url(#foliage3D)"/>',
-        '<circle cx="12" cy="-24" r="14" fill="url(#foliage3D)"/>',
         '</g>',
         # Flores
         f'<g opacity="{flowers_opacity:.2f}">',
-        '<circle cx="295" cy="280" r="4.5" fill="#F472B6"/><circle cx="295" cy="280" r="2" fill="#FEF08A"/>',
-        '<circle cx="355" cy="284" r="4.5" fill="#A78BFA"/><circle cx="355" cy="284" r="2" fill="#FEF08A"/>',
-        '<circle cx="410" cy="281" r="4" fill="#FB7185"/><circle cx="410" cy="281" r="1.8" fill="#FEF08A"/>',
-        '<circle cx="795" cy="282" r="4.5" fill="#F472B6"/><circle cx="795" cy="282" r="2" fill="#FEF08A"/>',
-        '<circle cx="865" cy="279" r="4.5" fill="#A78BFA"/><circle cx="865" cy="279" r="2" fill="#FEF08A"/>',
-        '<circle cx="935" cy="284" r="4" fill="#FBBF24"/><circle cx="935" cy="284" r="1.8" fill="#FFFFFF"/>',
+        '<circle cx="215" cy="144" r="3.5" fill="#F472B6"/><circle cx="215" cy="144" r="1.5" fill="#FEF08A"/>',
+        '<circle cx="290" cy="147" r="3.5" fill="#A78BFA"/><circle cx="290" cy="147" r="1.5" fill="#FEF08A"/>',
+        '<circle cx="395" cy="145" r="3.2" fill="#FB7185"/><circle cx="395" cy="145" r="1.4" fill="#FEF08A"/>',
+        '<circle cx="505" cy="146" r="3.5" fill="#F472B6"/><circle cx="505" cy="146" r="1.5" fill="#FEF08A"/>',
+        '<circle cx="610" cy="144" r="3.5" fill="#A78BFA"/><circle cx="610" cy="144" r="1.5" fill="#FEF08A"/>',
+        '<circle cx="685" cy="147" r="3.2" fill="#FBBF24"/><circle cx="685" cy="147" r="1.4" fill="#FFFFFF"/>',
         '</g>',
         # Plantas rodadoras (Tumbleweeds) rodando por el desierto
         f'<g opacity="{tumbleweed_opacity:.2f}">',
         '<g class="jardin-tumbleweed-1">',
-        '<circle cx="0" cy="0" r="18" fill="none" stroke="#78350F" stroke-width="2.2" stroke-dasharray="7 4"/>',
-        '<ellipse cx="0" cy="0" rx="18" ry="10" fill="none" stroke="#92400E" stroke-width="1.8" transform="rotate(35)"/>',
-        '<ellipse cx="0" cy="0" rx="18" ry="10" fill="none" stroke="#78350F" stroke-width="1.8" transform="rotate(-35)"/>',
-        '<path d="M -12 -6 L 12 6 M -10 8 L 10 -8" stroke="#92400E" stroke-width="1.5"/>',
+        '<circle cx="0" cy="0" r="12" fill="none" stroke="#78350F" stroke-width="1.8" stroke-dasharray="5 3"/>',
+        '<ellipse cx="0" cy="0" rx="12" ry="7" fill="none" stroke="#92400E" stroke-width="1.4" transform="rotate(35)"/>',
+        '<ellipse cx="0" cy="0" rx="12" ry="7" fill="none" stroke="#78350F" stroke-width="1.4" transform="rotate(-35)"/>',
+        '<path d="M -8 -4 L 8 4 M -7 5 L 7 -5" stroke="#92400E" stroke-width="1.2"/>',
         '</g>',
         '<g class="jardin-tumbleweed-2">',
-        '<circle cx="0" cy="0" r="14" fill="none" stroke="#78350F" stroke-width="2" stroke-dasharray="5 3"/>',
-        '<ellipse cx="0" cy="0" rx="14" ry="8" fill="none" stroke="#92400E" stroke-width="1.6" transform="rotate(50)"/>',
-        '<ellipse cx="0" cy="0" rx="14" ry="8" fill="none" stroke="#78350F" stroke-width="1.6" transform="rotate(-40)"/>',
+        '<circle cx="0" cy="0" r="10" fill="none" stroke="#78350F" stroke-width="1.6" stroke-dasharray="4 2.5"/>',
+        '<ellipse cx="0" cy="0" rx="10" ry="6" fill="none" stroke="#92400E" stroke-width="1.3" transform="rotate(50)"/>',
+        '<ellipse cx="0" cy="0" rx="10" ry="6" fill="none" stroke="#78350F" stroke-width="1.3" transform="rotate(-40)"/>',
         '</g>',
         '</g>',
         '</svg>',
-        # Personaje izquierdo (Canguro) posicionado absolutamente DENTRO del panel con overflow: visible
+        # Canguro en el extremo izquierdo del panel de escena y Koala en el extremo derecho
         f'<div class="jardin-char-wrap jardin-char-left">{svg_canguro}</div>',
-        # Contenido central con el nuevo orden solicitado
-        '<div class="jardin-health-overlay">',
-        '<div class="kpi-title" style="font-size: 1.22rem; color: #1F2937;">Patrimonio Total</div>',
-        f'<div class="kpi-value" style="font-size: 2.15rem; color: #111827;">{total_patrimonio_ars:,.0f} ARS</div>',
-        f'<div class="kpi-usd" style="font-size: 1.12rem; color: #1F2937; background: rgba(255,255,255,0.9);">{total_patrimonio_usd:,.2f} USD</div>',
-        f'<div class="jardin-status-box" style="background: {badge_bg}; color: {badge_text}; border-color: {border_col};">',
-        f'<div style="font-size: 0.95rem; font-weight: 800; line-height: 1.35;">{mensaje_salud}</div>',
-        '<div class="jardin-health-bar-track">',
-        f'<div class="jardin-health-bar-fill" style="width: {pct_salud}%; background: {border_col};"></div>',
-        '</div>',
-        '</div>',
-        f'<div class="kpi-sub" style="color: #374151; font-weight: 700; margin-top: 8px; margin-bottom: 0;">{cant_activos_contemplados} activos de {cant_activos_totales} contemplados</div>',
-        '</div>',
-        # Personaje derecho (Koala) posicionado absolutamente DENTRO del panel con overflow: visible
         f'<div class="jardin-char-wrap jardin-char-right">{svg_koala}</div>',
+        '</div>',
         '</div>'
     ]
     return "\n".join(lineas_html)
@@ -2581,22 +2590,44 @@ st.markdown("""
         cursor: default !important;
     }
 
-    /* Escena animada 3D de Salud Financiera (ancho reducido a la mitad, centrada, personajes sin recorte) */
+    /* Banner horizontal continuo dividido en dos paneles contiguos (32% Info izquierda + 68% Escena derecha) */
     .jardin-health-scene {
         position: relative;
-        width: 50%;
-        max-width: 50%;
-        min-width: 340px;
-        margin: 0 auto 1.1rem auto;
-        border-radius: 22px;
+        width: 100%;
+        max-width: 100%;
+        margin: 0 0 1.1rem 0;
+        border-radius: 18px;
         border: 3px solid #22C55E;
         overflow: hidden;
-        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14), inset 0 2px 8px rgba(255, 255, 255, 0.35);
-        min-height: 270px;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+        min-height: 142px;
         display: flex;
-        align-items: center;
+        flex-direction: row;
+        align-items: stretch;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    .jardin-info-panel {
+        flex: 0 0 32%;
+        width: 32%;
+        min-width: 280px;
+        background: #FDFBF7;
+        border-right: 2px solid #22C55E;
+        padding: 8px 14px;
+        display: flex;
+        flex-direction: column;
         justify-content: center;
-        padding: 16px 118px;
+        align-items: center;
+        text-align: center;
+        box-sizing: border-box;
+        z-index: 2;
+    }
+    .jardin-scene-panel {
+        flex: 1 1 68%;
+        width: 68%;
+        position: relative;
+        overflow: hidden;
+        min-height: 142px;
         box-sizing: border-box;
     }
     .jardin-scene-svg {
@@ -2609,9 +2640,9 @@ st.markdown("""
     }
     .jardin-char-wrap {
         position: absolute;
-        bottom: 6px;
-        width: 108px;
-        height: 155px;
+        bottom: 4px;
+        width: 82px;
+        height: 112px;
         z-index: 3;
         pointer-events: none;
         overflow: visible !important;
@@ -2620,43 +2651,32 @@ st.markdown("""
         justify-content: center;
     }
     .jardin-char-left {
-        left: 8px;
+        left: 12px;
     }
     .jardin-char-right {
-        right: 8px;
+        right: 12px;
     }
     .jardin-char-svg {
         width: 100%;
         height: 100%;
         overflow: visible !important;
     }
-    .jardin-health-overlay {
-        position: relative;
-        z-index: 2;
-        background: rgba(255, 255, 255, 0.86);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        border: 1.5px solid rgba(255, 255, 255, 0.94);
-        border-radius: 18px;
-        padding: 12px 18px;
-        text-align: center;
-        width: 100%;
-        box-shadow: 0 8px 24px rgba(17, 24, 39, 0.12);
-    }
     .jardin-status-box {
-        margin-top: 8px;
-        padding: 9px 12px;
-        border-radius: 12px;
+        margin-top: 5px;
+        padding: 6px 10px;
+        border-radius: 10px;
         border: 1.5px solid;
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+        width: 100%;
+        box-sizing: border-box;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     }
     .jardin-health-bar-track {
         width: 100%;
-        height: 7px;
+        height: 6px;
         background: rgba(255, 255, 255, 0.78);
         border-radius: 999px;
         overflow: hidden;
-        margin-top: 6px;
+        margin-top: 5px;
         border: 1px solid rgba(0,0,0,0.08);
     }
     .jardin-health-bar-fill {
@@ -2667,16 +2687,16 @@ st.markdown("""
 
     @keyframes jardinKangaBounce {
         0%, 100% { transform: translateY(0px) scaleY(1); }
-        45% { transform: translateY(-9px) scaleY(1.03); }
-        55% { transform: translateY(-9px) scaleY(1.03); }
+        45% { transform: translateY(-7px) scaleY(1.03); }
+        55% { transform: translateY(-7px) scaleY(1.03); }
     }
     @keyframes jardinKoalaSway {
         0%, 100% { transform: translateY(0px) rotate(0deg); }
-        50% { transform: translateY(-4px) rotate(-2.5deg); }
+        50% { transform: translateY(-3px) rotate(-2.5deg); }
     }
     @keyframes jardinTiredBreath {
-        0%, 100% { transform: translateY(6px) scaleY(0.98); }
-        50% { transform: translateY(9px) scaleY(0.95); }
+        0%, 100% { transform: translateY(4px) scaleY(0.98); }
+        50% { transform: translateY(7px) scaleY(0.95); }
     }
     @keyframes jardinSunFireSpin {
         0% { transform: rotate(0deg) scale(1); }
@@ -2684,16 +2704,16 @@ st.markdown("""
         100% { transform: rotate(360deg) scale(1); }
     }
     @keyframes jardinTumbleweedRoll1 {
-        0% { transform: translate(160px, 278px) rotate(0deg); }
-        25% { transform: translate(420px, 262px) rotate(180deg); }
-        50% { transform: translate(680px, 280px) rotate(360deg); }
-        75% { transform: translate(910px, 264px) rotate(540deg); }
-        100% { transform: translate(1080px, 279px) rotate(720deg); }
+        0% { transform: translate(115px, 141px) rotate(0deg); }
+        25% { transform: translate(295px, 131px) rotate(180deg); }
+        50% { transform: translate(475px, 142px) rotate(360deg); }
+        75% { transform: translate(640px, 132px) rotate(540deg); }
+        100% { transform: translate(780px, 141px) rotate(720deg); }
     }
     @keyframes jardinTumbleweedRoll2 {
-        0% { transform: translate(260px, 285px) rotate(0deg); }
-        50% { transform: translate(640px, 270px) rotate(360deg); }
-        100% { transform: translate(990px, 284px) rotate(720deg); }
+        0% { transform: translate(190px, 145px) rotate(0deg); }
+        50% { transform: translate(470px, 135px) rotate(360deg); }
+        100% { transform: translate(730px, 144px) rotate(720deg); }
     }
     @keyframes jardinFlyBuzz1 {
         0% { transform: translate(65px, 78px) rotate(0deg); }
@@ -2760,41 +2780,39 @@ st.markdown("""
         }
     }
 
-    @media (max-width: 960px) {
-        .jardin-health-scene {
-            width: 85% !important;
-            max-width: 85% !important;
-            padding: 14px 96px !important;
-        }
-        .jardin-char-wrap {
-            width: 88px !important;
-            height: 130px !important;
-            bottom: 4px !important;
-        }
-    }
-
     @media (max-width: 768px) {
         .jardin-health-scene {
-            width: 96% !important;
-            max-width: 96% !important;
-            min-width: 280px !important;
-            padding: 14px 76px !important;
-            min-height: 260px !important;
+            flex-direction: column !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-height: auto !important;
+        }
+        .jardin-info-panel {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            border-right: none !important;
+            border-bottom: 2px solid #D1D5DB !important;
+            padding: 10px 12px !important;
+        }
+        .jardin-scene-panel {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 145px !important;
+            min-height: 145px !important;
         }
         .jardin-char-wrap {
-            width: 70px !important;
-            height: 108px !important;
+            width: 72px !important;
+            height: 100px !important;
             bottom: 4px !important;
         }
         .jardin-char-left {
-            left: 4px !important;
+            left: 8px !important;
         }
         .jardin-char-right {
-            right: 4px !important;
-        }
-        .jardin-health-overlay {
-            padding: 10px 12px !important;
-            background: rgba(255, 255, 255, 0.88) !important;
+            right: 8px !important;
         }
         .block-container {
             max-width: 100% !important;
