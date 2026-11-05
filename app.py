@@ -12,7 +12,12 @@ import smtplib
 import urllib.parse
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import time
+import hmac
+import hashlib
+import base64
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from xml.sax.saxutils import escape as xml_escape
 
 st.set_page_config(
@@ -547,15 +552,44 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None, ubicac
             }
         }
 
-        // 6. Tooltip flotante al pasar el cursor o enfocar "3. Cantidad que tenés" (desktop y móvil)
-        function configurarTooltipCantidad() {
+        // 6. Tooltip único negro en "3. Cantidad que tenés" (sin tooltip blanco duplicado) y botón Actualizar verde claro
+        function configurarTooltipCantidadYBotones() {
+            const oldMenu = doc.getElementById('jardin-ubicacion-dropdown');
+            if (oldMenu) oldMenu.remove();
+
             const inpCant = doc.querySelector('input[aria-label="3. Cantidad que tenés"]');
-            if (!inpCant) return;
-            const stInputBox = inpCant.closest('[data-testid="stTextInput"]') || inpCant.parentElement;
-            if (stInputBox && textoTooltipCantidad) {
-                stInputBox.classList.add('jardin-cant-tooltip-wrap');
-                stInputBox.setAttribute('data-tooltip', textoTooltipCantidad);
-                inpCant.setAttribute('title', textoTooltipCantidad);
+            if (inpCant) {
+                inpCant.removeAttribute('title');
+                const stInputBox = inpCant.closest('[data-testid="stTextInput"]') || inpCant.parentElement;
+                if (stInputBox && textoTooltipCantidad) {
+                    stInputBox.classList.add('jardin-cant-tooltip-wrap');
+                    stInputBox.setAttribute('data-tooltip', textoTooltipCantidad);
+                    stInputBox.querySelectorAll('[title]').forEach(el => el.removeAttribute('title'));
+                    const helpTarget = stInputBox.querySelector('[data-testid="stTooltipHoverTarget"]');
+                    if (helpTarget) {
+                        helpTarget.style.pointerEvents = 'none';
+                    }
+                }
+            }
+
+            // Estilizar el botón "Actualizar" del sidebar con fondo verde claro
+            const sidebar = doc.querySelector('[data-testid="stSidebar"]');
+            if (sidebar) {
+                sidebar.querySelectorAll('button').forEach(btn => {
+                    const txt = (btn.innerText || btn.textContent || '').trim();
+                    if (txt.includes('Actualizar')) {
+                        btn.style.setProperty('background', '#D8F3DC', 'important');
+                        btn.style.setProperty('background-color', '#D8F3DC', 'important');
+                        btn.style.setProperty('border', '1.5px solid #74C69D', 'important');
+                        btn.style.setProperty('color', '#1B4332', 'important');
+                        btn.style.setProperty('font-weight', '700', 'important');
+                        btn.style.setProperty('border-radius', '12px', 'important');
+                        btn.querySelectorAll('p, span, div').forEach(ch => {
+                            ch.style.setProperty('color', '#1B4332', 'important');
+                            ch.style.setProperty('font-weight', '700', 'important');
+                        });
+                    }
+                });
             }
         }
 
@@ -564,8 +598,7 @@ def activar_interactividad_avanzada(cats_costos=None, cats_ingresos=None, ubicac
             limpiarInputsYPopups();
             estilizarSolapasYBotonesOrden();
             asegurarLineasConectorasTortas();
-            configurarDropdownUbicacion();
-            configurarTooltipCantidad();
+            configurarTooltipCantidadYBotones();
         }
 
         if (win.__jardinCleanupListeners) {
@@ -967,11 +1000,15 @@ def construir_html_panel_patrimonio(
     total_patrimonio_usd,
     cant_activos_contemplados,
     cant_activos_totales,
+    ingreso_mensual_ars,
     costo_mensual_ars,
     dolar_b,
-    hay_moneda_extranjera=False
+    hay_moneda_extranjera=False,
+    datos_faltantes=False
 ):
     tasa_invalida = hay_moneda_extranjera and (dolar_b is None or float(dolar_b) <= 0)
+    es_crecimiento = False
+    linea_ahorro_positivo_html = ""
 
     if tasa_invalida:
         score = 0.5
@@ -979,69 +1016,78 @@ def construir_html_panel_patrimonio(
             "⚠️ Advertencia: Se detectaron activos o costos en otra moneda "
             "pero no hay un tipo de cambio disponible para convertir a ARS."
         )
-    elif costo_mensual_ars <= 0:
-        score = 1.0 if total_patrimonio_ars > 0 else 0.5
-        mensaje_salud = "Sin costos cargados"
+    elif datos_faltantes or (ingreso_mensual_ars <= 0 and costo_mensual_ars <= 0):
+        score = 0.5
+        mensaje_salud = "Cargá ingresos y costos"
     else:
-        meses_float = float(total_patrimonio_ars) / float(costo_mensual_ars)
-        meses_int = max(0, int(round(meses_float)))
-        anios_s = meses_int // 12
-        meses_rem = meses_int % 12
+        monthly_saving = float(ingreso_mensual_ars) - float(costo_mensual_ars)
 
-        if meses_int <= 12:
-            tiempo_str = f"{meses_int} meses"
-        else:
-            tiempo_str = f"{anios_s} años y {meses_rem} meses"
-
-        if meses_float >= 60.0:
+        if abs(monthly_saving) < 0.005:
             score = 1.0
-        elif meses_float <= 12.0:
-            score = 0.0
+            mensaje_salud = "Estamos bien financieramente: tus ahorros son cero y tu patrimonio se mantiene intacto."
+        elif monthly_saving > 0:
+            score = 1.0
+            es_crecimiento = True
+            linea_ahorro_positivo_html = (
+                f'<div style="color: #15803D; background: #DCFCE7; border: 1px solid #86EFAC; '
+                f'border-radius: 8px; padding: 2px 9px; font-size: 0.86rem; font-weight: 800; '
+                f'margin-top: 4px; display: inline-block;">'
+                f'Ahorro mensual: +{monthly_saving:,.0f} ARS'
+                f'</div>'
+            )
+            mensaje_salud = (
+                f"Estamos muy bien financieramente: ahorrás {monthly_saving:,.0f} ARS por mes y tu patrimonio crece."
+            )
         else:
-            score = (meses_float - 12.0) / (60.0 - 12.0)
+            perdida_mensual = abs(monthly_saving)
+            if total_patrimonio_ars <= 0:
+                months_left = 0.0
+                meses_int = 0
+                tiempo_str = "0 meses"
+                score = 0.0
+                mensaje_salud = "Estamos en llamas financieramente, a este ritmo te quedan 0 meses."
+            else:
+                months_left = float(total_patrimonio_ars) / float(perdida_mensual)
+                meses_int = max(0, int(round(months_left)))
+                anios_s = meses_int // 12
+                meses_rem = meses_int % 12
 
-        if meses_float >= 60.0:
-            mensaje_salud = (
-                f"Estamos muy bien financieramente, te quedan {anios_s} años y {meses_rem} meses "
-                f"de vivir sin nuevos ingresos"
-            )
-        elif meses_float <= 12.0:
-            mensaje_salud = (
-                f"Estamos en llamas financieramente, te quedan {tiempo_str} "
-                f"de sobrevivir sin ingresos"
-            )
-        elif score >= 0.70:
-            mensaje_salud = (
-                f"Estamos bien financieramente, con buena reserva: te quedan {tiempo_str} "
-                f"de vivir sin nuevos ingresos"
-            )
-        elif score >= 0.40:
-            mensaje_salud = (
-                f"Atención financiera: el jardín empieza a secarse, te quedan {tiempo_str} "
-                f"de vivir sin nuevos ingresos"
-            )
-        else:
-            mensaje_salud = (
-                f"Alerta financiera: sequía severa en progreso, te quedan apenas {tiempo_str} "
-                f"de sobrevivir sin nuevos ingresos"
-            )
+                if meses_int <= 12:
+                    tiempo_str = f"{meses_int} meses"
+                else:
+                    tiempo_str = f"{anios_s} años y {meses_rem} meses"
+
+                if months_left >= 60.0:
+                    score = 1.0
+                elif months_left <= 12.0:
+                    score = 0.0
+                else:
+                    score = (months_left - 12.0) / (60.0 - 12.0)
+
+                if months_left <= 12.0:
+                    mensaje_salud = f"Estamos en llamas financieramente, a este ritmo te quedan {tiempo_str}."
+                else:
+                    mensaje_salud = (
+                        f"Tus ahorros mensuales son negativos (−{perdida_mensual:,.0f} ARS): "
+                        f"a este ritmo tu patrimonio dura {tiempo_str}."
+                    )
 
     # Interpolación continua de colores del cielo, colinas, suelo y follaje según score (0 a 1)
-    sky_top = _multi_color([
+    sky_top = "#0EA5E9" if es_crecimiento else _multi_color([
         (0.0, "#7F1D1D"),
         (0.25, "#C2410C"),
         (0.55, "#F59E0B"),
         (0.80, "#7DD3FC"),
         (1.0, "#38BDF8")
     ], score)
-    sky_mid = _multi_color([
+    sky_mid = "#A5F3FC" if es_crecimiento else _multi_color([
         (0.0, "#DC2626"),
         (0.25, "#EA580C"),
         (0.55, "#FDE68A"),
         (0.80, "#BAE6FD"),
         (1.0, "#CCFBF1")
     ], score)
-    sky_bot = _multi_color([
+    sky_bot = "#A7F3D0" if es_crecimiento else _multi_color([
         (0.0, "#F97316"),
         (0.25, "#FDBA74"),
         (0.55, "#FEF3C7"),
@@ -1054,21 +1100,21 @@ def construir_html_panel_patrimonio(
         (0.30, "#B45309"),
         (0.60, "#A16207"),
         (0.85, "#4ADE80"),
-        (1.0, "#22C55E")
+        (1.0, "#10B981" if es_crecimiento else "#22C55E")
     ], score)
     hill_mid = _multi_color([
         (0.0, "#B45309"),
         (0.30, "#D97706"),
         (0.60, "#CA8A04"),
         (0.85, "#22C55E"),
-        (1.0, "#16A34A")
+        (1.0, "#059669" if es_crecimiento else "#16A34A")
     ], score)
     ground_front = _multi_color([
         (0.0, "#78350F"),
         (0.30, "#92400E"),
         (0.60, "#854D0E"),
         (0.85, "#15803D"),
-        (1.0, "#166534")
+        (1.0, "#047857" if es_crecimiento else "#166534")
     ], score)
 
     leaf_main = _multi_color([
@@ -1076,28 +1122,28 @@ def construir_html_panel_patrimonio(
         (0.25, "#A16207"),
         (0.55, "#EAB308"),
         (0.80, "#4ADE80"),
-        (1.0, "#16A34A")
+        (1.0, "#10B981" if es_crecimiento else "#16A34A")
     ], score)
     leaf_light = _multi_color([
         (0.0, "#92400E"),
         (0.25, "#CA8A04"),
         (0.55, "#FDE047"),
         (0.80, "#86EFAC"),
-        (1.0, "#4ADE80")
+        (1.0, "#6EE7B7" if es_crecimiento else "#4ADE80")
     ], score)
     leaf_dark = _multi_color([
         (0.0, "#451A03"),
         (0.25, "#713F12"),
         (0.55, "#A16207"),
         (0.80, "#15803D"),
-        (1.0, "#14532D")
+        (1.0, "#065F46" if es_crecimiento else "#14532D")
     ], score)
 
     border_col = _multi_color([
         (0.0, "#EF4444"),
         (0.35, "#F59E0B"),
         (0.70, "#84CC16"),
-        (1.0, "#22C55E")
+        (1.0, "#10B981" if es_crecimiento else "#22C55E")
     ], score)
 
     fire_opacity = max(0.0, min(1.0, ((1.0 - score) ** 1.35)))
@@ -1108,6 +1154,7 @@ def construir_html_panel_patrimonio(
     cracks_opacity = max(0.0, min(1.0, (0.45 - score) / 0.45)) if score < 0.45 else 0.0
     clouds_opacity = max(0.0, min(0.92, (score - 0.15) / 0.85))
     flowers_opacity = max(0.0, min(1.0, (score - 0.55) / 0.45))
+    fruits_opacity = 1.0 if es_crecimiento else 0.0
     droop_deg = (1.0 - score) * 34.0
 
     def _plant_style(threshold):
@@ -1115,7 +1162,8 @@ def construir_html_panel_patrimonio(
             return 0.0, 0.0
         sc = max(0.15, min(1.0, (score - threshold) / (1.0 - threshold)))
         op = max(0.0, min(1.0, (score - threshold) / max(0.18, 1.0 - threshold)))
-        return sc * 0.62, op
+        mult_s = 0.68 if es_crecimiento else 0.62
+        return sc * mult_s, op
 
     t1_s, t1_o = _plant_style(0.04)
     t2_s, t2_o = _plant_style(0.18)
@@ -1140,6 +1188,28 @@ def construir_html_panel_patrimonio(
     svg_canguro = _construir_svg_canguro(score)
     svg_koala = _construir_svg_koala(score)
 
+    # Frutas y flores en las copas de los árboles cuando monthly_saving > 0 (es_crecimiento)
+    frutas_arbol_grande = (
+        f'<g opacity="{fruits_opacity:.2f}">'
+        '<circle cx="-14" cy="-86" r="5.2" fill="#EF4444"/><circle cx="-15" cy="-87.5" r="1.5" fill="#FCA5A5"/>'
+        '<circle cx="15" cy="-84" r="5.2" fill="#F97316"/><circle cx="13.5" cy="-85.5" r="1.5" fill="#FDBA74"/>'
+        '<circle cx="0" cy="-66" r="5.2" fill="#EF4444"/><circle cx="-1.5" cy="-67.5" r="1.5" fill="#FCA5A5"/>'
+        '<circle cx="-8" cy="-102" r="4.5" fill="#F43F5E"/>'
+        '<circle cx="10" cy="-100" r="4.8" fill="#FB923C"/>'
+        '<circle cx="-22" cy="-68" r="4.2" fill="#FDE047"/>'
+        '<circle cx="22" cy="-68" r="4.2" fill="#F472B6"/>'
+        '</g>'
+    )
+    frutas_arbol_mediano = (
+        f'<g opacity="{fruits_opacity:.2f}">'
+        '<circle cx="-10" cy="-66" r="4.8" fill="#EF4444"/>'
+        '<circle cx="11" cy="-64" r="4.8" fill="#F97316"/>'
+        '<circle cx="0" cy="-52" r="4.5" fill="#F43F5E"/>'
+        '<circle cx="-14" cy="-52" r="3.8" fill="#FDE047"/>'
+        '<circle cx="14" cy="-52" r="3.8" fill="#F472B6"/>'
+        '</g>'
+    )
+
     lineas_html = [
         f'<div class="jardin-health-scene" style="border-color: {border_col};">',
         # 1) PANEL DE INFORMACIÓN (IZQUIERDA, 32% EN ESCRITORIO, ALINEADO AL BORDE IZQUIERDO)
@@ -1147,6 +1217,7 @@ def construir_html_panel_patrimonio(
         '<div class="kpi-title" style="font-size: 1.05rem; color: #1F2937; margin-bottom: 1px;">Patrimonio Total</div>',
         f'<div class="kpi-value" style="font-size: 1.72rem; color: #111827; line-height: 1.12;">{total_patrimonio_ars:,.0f} ARS</div>',
         f'<div class="kpi-usd" style="font-size: 0.96rem; color: #1F2937; background: rgba(255,255,255,0.92); margin-top: 3px; padding: 2px 9px;">{total_patrimonio_usd:,.2f} USD</div>',
+        linea_ahorro_positivo_html,
         f'<div class="jardin-status-box" style="background: {badge_bg}; color: {badge_text}; border-color: {border_col};">',
         f'<div style="font-size: 0.84rem; font-weight: 800; line-height: 1.25;">{mensaje_salud}</div>',
         '<div class="jardin-health-bar-track">',
@@ -1226,68 +1297,75 @@ def construir_html_panel_patrimonio(
         '<path d="M 430 146 L 452 151 L 442 158 M 452 151 L 474 149"/>',
         '<path d="M 640 143 L 660 150 L 650 157 M 660 150 L 682 153"/>',
         '</g>',
-        # Árboles y plantas proporcionales a la nueva altura (distribuidos a lo largo del panel de escena)
-        f'<g class="jardin-sway-tree" opacity="{t1_o:.2f}" transform="translate(185, 132) scale({t1_s:.2f}) rotate({droop_deg * 0.45:.1f})" filter="url(#softShadow3D)">',
+        # Árboles y plantas con frutas/flores en modo crecimiento
+        f'<g class="jardin-sway-tree" opacity="{t1_o:.2f}" transform="translate(215, 132) scale({t1_s:.2f}) rotate({droop_deg * 0.45:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -7 0 L -4 -68 L 4 -68 L 7 0 Z" fill="url(#trunk3D)"/>',
         '<circle cx="0" cy="-82" r="34" fill="url(#foliage3D)"/>',
         '<circle cx="-22" cy="-68" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="22" cy="-68" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="0" cy="-104" r="24" fill="url(#foliage3D)"/>',
+        frutas_arbol_grande,
         '</g>',
-        f'<g class="jardin-sway-tree-alt" opacity="{t2_o:.2f}" transform="translate(265, 136) scale({t2_s:.2f}) rotate({droop_deg * 0.6:.1f})" filter="url(#softShadow3D)">',
+        f'<g class="jardin-sway-tree-alt" opacity="{t2_o:.2f}" transform="translate(295, 136) scale({t2_s:.2f}) rotate({droop_deg * 0.6:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -5 0 L -3 -52 L 3 -52 L 5 0 Z" fill="url(#trunk3D)"/>',
         '<ellipse cx="0" cy="-64" rx="28" ry="24" fill="url(#foliage3D)"/>',
         '<circle cx="-16" cy="-54" r="18" fill="url(#foliage3D)"/>',
         '<circle cx="16" cy="-54" r="18" fill="url(#foliage3D)"/>',
+        frutas_arbol_mediano,
         '</g>',
-        f'<g class="jardin-sway-tree" opacity="{t3_o:.2f}" transform="translate(365, 134) scale({t3_s:.2f}) rotate({droop_deg * 0.5:.1f})" filter="url(#softShadow3D)">',
+        f'<g class="jardin-sway-tree" opacity="{t3_o:.2f}" transform="translate(385, 134) scale({t3_s:.2f}) rotate({droop_deg * 0.5:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -6 0 L -3 -58 L 3 -58 L 6 0 Z" fill="url(#trunk3D)"/>',
         '<circle cx="0" cy="-72" r="30" fill="url(#foliage3D)"/>',
         '<circle cx="-18" cy="-58" r="22" fill="url(#foliage3D)"/>',
         '<circle cx="18" cy="-58" r="22" fill="url(#foliage3D)"/>',
+        frutas_arbol_mediano,
         '</g>',
         f'<g class="jardin-sway-tree-alt" opacity="{t3_o:.2f}" transform="translate(535, 134) scale({t3_s:.2f}) rotate(-{droop_deg * 0.55:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -6 0 L -3 -58 L 3 -58 L 6 0 Z" fill="url(#trunk3D)"/>',
         '<circle cx="0" cy="-72" r="30" fill="url(#foliage3D)"/>',
         '<circle cx="-18" cy="-58" r="22" fill="url(#foliage3D)"/>',
         '<circle cx="18" cy="-58" r="22" fill="url(#foliage3D)"/>',
+        frutas_arbol_mediano,
         '</g>',
-        f'<g class="jardin-sway-tree" opacity="{t2_o:.2f}" transform="translate(635, 136) scale({t2_s:.2f}) rotate(-{droop_deg * 0.6:.1f})" filter="url(#softShadow3D)">',
+        f'<g class="jardin-sway-tree" opacity="{t2_o:.2f}" transform="translate(650, 136) scale({t2_s:.2f}) rotate(-{droop_deg * 0.6:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -5 0 L -3 -52 L 3 -52 L 5 0 Z" fill="url(#trunk3D)"/>',
         '<ellipse cx="0" cy="-64" rx="28" ry="24" fill="url(#foliage3D)"/>',
         '<circle cx="-16" cy="-54" r="18" fill="url(#foliage3D)"/>',
         '<circle cx="16" cy="-54" r="18" fill="url(#foliage3D)"/>',
+        frutas_arbol_mediano,
         '</g>',
-        f'<g class="jardin-sway-tree-alt" opacity="{t1_o:.2f}" transform="translate(715, 132) scale({t1_s:.2f}) rotate(-{droop_deg * 0.4:.1f})" filter="url(#softShadow3D)">',
+        f'<g class="jardin-sway-tree-alt" opacity="{t1_o:.2f}" transform="translate(765, 132) scale({t1_s:.2f}) rotate(-{droop_deg * 0.4:.1f})" filter="url(#softShadow3D)">',
         '<path d="M -7 0 L -4 -70 L 4 -70 L 7 0 Z" fill="url(#trunk3D)"/>',
         '<circle cx="0" cy="-86" r="35" fill="url(#foliage3D)"/>',
         '<circle cx="-24" cy="-70" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="24" cy="-70" r="25" fill="url(#foliage3D)"/>',
         '<circle cx="0" cy="-108" r="24" fill="url(#foliage3D)"/>',
+        frutas_arbol_grande,
         '</g>',
-        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(315, 140) scale({t4_s:.2f}) rotate({droop_deg * 0.7:.1f})">',
+        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(340, 140) scale({t4_s:.2f}) rotate({droop_deg * 0.7:.1f})">',
         '<ellipse cx="0" cy="-14" rx="22" ry="15" fill="url(#foliage3D)"/>',
         '<ellipse cx="-14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
         '<ellipse cx="14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(450, 141) scale({t5_s:.2f}) rotate({droop_deg * 0.5:.1f})">',
+        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(460, 141) scale({t5_s:.2f}) rotate({droop_deg * 0.5:.1f})">',
         '<ellipse cx="0" cy="-16" rx="25" ry="16" fill="url(#foliage3D)"/>',
         '<ellipse cx="-15" cy="-11" rx="17" ry="12" fill="url(#foliage3D)"/>',
         '<ellipse cx="15" cy="-11" rx="17" ry="12" fill="url(#foliage3D)"/>',
         '</g>',
-        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(585, 140) scale({t4_s:.2f}) rotate(-{droop_deg * 0.7:.1f})">',
+        f'<g class="jardin-sway-bush" opacity="{t4_o:.2f}" transform="translate(595, 140) scale({t4_s:.2f}) rotate(-{droop_deg * 0.7:.1f})">',
         '<ellipse cx="0" cy="-14" rx="22" ry="15" fill="url(#foliage3D)"/>',
         '<ellipse cx="-14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
         '<ellipse cx="14" cy="-10" rx="16" ry="12" fill="url(#foliage3D)"/>',
         '</g>',
         # Flores
         f'<g opacity="{flowers_opacity:.2f}">',
-        '<circle cx="215" cy="144" r="3.5" fill="#F472B6"/><circle cx="215" cy="144" r="1.5" fill="#FEF08A"/>',
-        '<circle cx="290" cy="147" r="3.5" fill="#A78BFA"/><circle cx="290" cy="147" r="1.5" fill="#FEF08A"/>',
-        '<circle cx="395" cy="145" r="3.2" fill="#FB7185"/><circle cx="395" cy="145" r="1.4" fill="#FEF08A"/>',
-        '<circle cx="505" cy="146" r="3.5" fill="#F472B6"/><circle cx="505" cy="146" r="1.5" fill="#FEF08A"/>',
-        '<circle cx="610" cy="144" r="3.5" fill="#A78BFA"/><circle cx="610" cy="144" r="1.5" fill="#FEF08A"/>',
-        '<circle cx="685" cy="147" r="3.2" fill="#FBBF24"/><circle cx="685" cy="147" r="1.4" fill="#FFFFFF"/>',
+        '<circle cx="245" cy="144" r="3.8" fill="#F472B6"/><circle cx="245" cy="144" r="1.6" fill="#FEF08A"/>',
+        '<circle cx="315" cy="147" r="3.8" fill="#A78BFA"/><circle cx="315" cy="147" r="1.6" fill="#FEF08A"/>',
+        '<circle cx="405" cy="145" r="3.5" fill="#FB7185"/><circle cx="405" cy="145" r="1.5" fill="#FEF08A"/>',
+        '<circle cx="515" cy="146" r="3.8" fill="#F472B6"/><circle cx="515" cy="146" r="1.6" fill="#FEF08A"/>',
+        '<circle cx="620" cy="144" r="3.8" fill="#A78BFA"/><circle cx="620" cy="144" r="1.6" fill="#FEF08A"/>',
+        '<circle cx="710" cy="147" r="3.5" fill="#FBBF24"/><circle cx="710" cy="147" r="1.5" fill="#FFFFFF"/>',
+        '<circle cx="820" cy="145" r="3.8" fill="#FB7185"/><circle cx="820" cy="145" r="1.6" fill="#FEF08A"/>',
         '</g>',
         # Plantas rodadoras (Tumbleweeds) rodando por el desierto
         f'<g opacity="{tumbleweed_opacity:.2f}">',
@@ -1304,7 +1382,7 @@ def construir_html_panel_patrimonio(
         '</g>',
         '</g>',
         '</svg>',
-        # Canguro en el extremo izquierdo del panel de escena y Koala en el extremo derecho
+        # Canguro y Koala juntos lado a lado en el extremo izquierdo del panel de escena
         f'<div class="jardin-char-wrap jardin-char-left">{svg_canguro}</div>',
         f'<div class="jardin-char-wrap jardin-char-right">{svg_koala}</div>',
         '</div>',
@@ -1585,9 +1663,47 @@ BONOS_BASE = [
 ]
 
 UBICACIONES_BASE = [
-    "Bco Nacion", "Uala", "Mercado Pago", "Binance",
-    "IOL", "Naranja X", "NEXO", "Kraken"
+    "Binance", "Nexo", "IOL", "Bco Macro",
+    "Mercado Pago", "Uala", "NX", "Claro Pay"
 ]
+
+
+def reparar_inversiones_corruptas(inversiones):
+    """Repara filas cuyo detalle es Pesos ARS o Dólares USD pero quedaron en otra categoría."""
+    modificado = False
+    for inv in (inversiones or []):
+        inv.setdefault("activo_inv", True)
+        tipo_norm = normalizar_tipo_activo_inv(inv.get("tipo", "Otros"))
+        det_str = str(inv.get("activo", "")).strip()
+        det_up = det_str.upper()
+        sim_up = str(inv.get("simbolo", "")).strip().upper()
+
+        if det_up in ["PESOS ARS", "PESOS", "A - PESOS ARS", "B - PESOS ARS", "EFECTIVO / BANCO"] or (
+            sim_up == "ARS" and tipo_norm in ["Acciones", "Cryptos", "Bonos"]
+        ):
+            if inv.get("tipo") != "Pesos ARS" or inv.get("activo") != "Pesos ARS" or inv.get("simbolo") != "ARS":
+                inv["tipo"] = "Pesos ARS"
+                inv["activo"] = "Pesos ARS"
+                inv["simbolo"] = "ARS"
+                modificado = True
+        elif det_up in ["DÓLARES USD", "DOLARES USD", "DÓLAR BILLETE", "DOLAR BILLETE", "A - DÓLAR BILLETE", "B - DÓLARES USD"] or (
+            sim_up == "USD" and tipo_norm in ["Acciones", "Cryptos", "Bonos"]
+        ):
+            if inv.get("tipo") != "Dólares USD" or inv.get("activo") != "Dólares USD" or inv.get("simbolo") != "USD":
+                inv["tipo"] = "Dólares USD"
+                inv["activo"] = "Dólares USD"
+                inv["simbolo"] = "USD"
+                modificado = True
+        else:
+            if inv.get("tipo") != tipo_norm:
+                inv["tipo"] = tipo_norm
+                modificado = True
+            if tipo_norm in ["Cryptos", "Acciones", "Bonos"]:
+                det_ticker = det_str.split(" ")[0].upper()
+                if det_ticker and det_ticker not in ["USD", "ARS"] and inv.get("simbolo") != det_ticker:
+                    inv["simbolo"] = det_ticker
+                    modificado = True
+    return modificado
 
 
 def parsear_numero_flexible(texto):
@@ -1643,9 +1759,12 @@ def registrar_ubicacion_guardada(datos, nueva_ubicacion):
     if not loc or loc.lower() == "sin especificar":
         return
     actuales = datos.get("ubicaciones_guardadas", list(UBICACIONES_BASE))
-    filtradas = [u for u in actuales if str(u).strip().lower() != loc.lower()]
+    filtradas = [u for u in actuales if str(u).strip() and str(u).strip().lower() != loc.lower()]
     filtradas.insert(0, loc)
-    datos["ubicaciones_guardadas"] = filtradas[:8]
+    for ub in UBICACIONES_BASE:
+        if not any(ub.lower() == u.lower() for u in filtradas):
+            filtradas.append(ub)
+    datos["ubicaciones_guardadas"] = filtradas
     ult = datos.setdefault("ultimas_selecciones_inv", {})
     ult["ubicacion"] = loc
 
@@ -1803,18 +1922,7 @@ def cargar_datos():
                     iconos_i[cat] = predecir_icono_categoria(cat, "ingreso")
             data["iconos_ingresos"] = iconos_i
 
-            for inv in data.get("inversiones", []):
-                inv.setdefault("activo_inv", True)
-                inv["tipo"] = normalizar_tipo_activo_inv(inv.get("tipo", "Otros"))
-
-                if inv.get("activo") in ["Dólar Billete", "A - Dólar Billete"]:
-                    inv["activo"] = "Dólares USD"
-
-                # Sincronizar símbolo con el detalle en caso de ediciones previas
-                if inv.get("tipo") in ["Cryptos", "Acciones", "Bonos"]:
-                    det_ticker = str(inv.get("activo", "")).strip().split(" ")[0].upper()
-                    if det_ticker and det_ticker not in ["USD", "ARS"]:
-                        inv["simbolo"] = det_ticker
+            reparar_inversiones_corruptas(data.get("inversiones", []))
 
             criptos_guardadas_raw = data.get("criptos_guardadas", criptos_base)
             for inv in data.get("inversiones", []):
@@ -1840,21 +1948,16 @@ def cargar_datos():
                         bonos_guardados_raw.append(bon_str)
             data["bonos_guardadas"] = normalizar_lista_activos_con_base(bonos_guardados_raw, BONOS_BASE)
 
-            # Inicializar y conservar las últimas 8 ubicaciones distintas (más reciente primero)
-            ubic_guardadas = data.get("ubicaciones_guardadas", [])
-            if not isinstance(ubic_guardadas, list):
-                ubic_guardadas = []
-            if not ubic_guardadas:
-                # Tomar las plataformas ya cargadas en inversiones (de más reciente a más antigua) + base
-                for inv in reversed(data.get("inversiones", [])):
-                    pl = str(inv.get("plataforma", "")).strip()
-                    if pl and pl.lower() != "sin especificar":
-                        if not any(pl.lower() == u.lower() for u in ubic_guardadas):
-                            ubic_guardadas.append(pl)
-                for ub in UBICACIONES_BASE:
-                    if not any(ub.lower() == u.lower() for u in ubic_guardadas):
-                        ubic_guardadas.append(ub)
-            data["ubicaciones_guardadas"] = ubic_guardadas[:8]
+            # Inicializar ubicaciones garantizando que las opciones por defecto estén siempre disponibles
+            ubic_guardadas = [str(u).strip() for u in data.get("ubicaciones_guardadas", []) if str(u).strip()]
+            for ub in UBICACIONES_BASE:
+                if not any(ub.lower() == u.lower() for u in ubic_guardadas):
+                    ubic_guardadas.append(ub)
+            for inv in reversed(data.get("inversiones", [])):
+                pl = str(inv.get("plataforma", "")).strip()
+                if pl and pl.lower() != "sin especificar" and not any(pl.lower() == u.lower() for u in ubic_guardadas):
+                    ubic_guardadas.insert(0, pl)
+            data["ubicaciones_guardadas"] = ubic_guardadas if ubic_guardadas else list(UBICACIONES_BASE)
 
             ult_sel = data.get("ultimas_selecciones_inv", {})
             if not isinstance(ult_sel, dict):
@@ -2869,6 +2972,16 @@ st.markdown("""
         visibility: visible;
         transform: translateY(0);
     }
+    .jardin-cant-tooltip-wrap [data-testid="stTooltipHoverTarget"] {
+        pointer-events: none !important;
+    }
+    /* Flecha chevron (⌄) idéntica en forma, tamaño y color en todos los dropdowns de la app */
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] svg {
+        width: 20px !important;
+        height: 20px !important;
+        color: #1F2937 !important;
+        fill: #1F2937 !important;
+    }
     .jardin-char-svg {
         width: 100%;
         height: 100%;
@@ -3050,9 +3163,83 @@ st.markdown("""
 
 datos = cargar_datos()
 
+# ----------------- PERSISTENCIA DE SESIÓN DE 7 DÍAS CON TOKEN FIRMADO (SIN CONTRASEÑA) -----------------
+def _obtener_secreto_token(datos):
+    seg = datos.setdefault("seguridad", {})
+    if not seg.get("token_secret"):
+        seg["token_secret"] = hashlib.sha256(f"jardin_{random.random()}_{time.time()}".encode()).hexdigest()
+        guardar_datos(datos)
+    return str(seg["token_secret"])
+
+
+def generar_token_sesion_7dias(datos, usuario):
+    secreto = _obtener_secreto_token(datos)
+    exp_ts = int(time.time()) + (7 * 86400)
+    usr_clean = str(usuario or "mama").strip().lower()
+    payload = f"{usr_clean}:{exp_ts}"
+    firma = hmac.new(secreto.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+    raw_token = f"{payload}:{firma}"
+    token_b64 = base64.urlsafe_b64encode(raw_token.encode("utf-8")).decode("utf-8").rstrip("=")
+    datos.setdefault("seguridad", {})["sesion_token_activo"] = token_b64
+    datos["seguridad"]["sesion_exp_ts"] = exp_ts
+    guardar_datos(datos)
+    try:
+        st.query_params["sesion"] = token_b64
+    except Exception:
+        pass
+    return token_b64
+
+
+def verificar_token_sesion_7dias(datos):
+    secreto = _obtener_secreto_token(datos)
+    seg = datos.get("seguridad", {})
+    token_q = ""
+    try:
+        token_q = str(st.query_params.get("sesion", "") or "").strip()
+    except Exception:
+        pass
+    token_candidato = token_q or str(seg.get("sesion_token_activo", "") or "").strip()
+    if not token_candidato:
+        return False
+    try:
+        pad = "=" * ((4 - len(token_candidato) % 4) % 4)
+        decoded = base64.urlsafe_b64decode((token_candidato + pad).encode("utf-8")).decode("utf-8")
+        usr_tok, exp_str, firma_tok = decoded.split(":")
+        exp_ts = int(exp_str)
+        if time.time() > exp_ts:
+            return False
+        payload = f"{usr_tok}:{exp_ts}"
+        firma_esp = hmac.new(secreto.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+        if hmac.compare_digest(firma_tok, firma_esp):
+            if not token_q:
+                try:
+                    st.query_params["sesion"] = token_candidato
+                except Exception:
+                    pass
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def limpiar_token_sesion(datos):
+    seg = datos.setdefault("seguridad", {})
+    seg["sesion_token_activo"] = ""
+    seg["sesion_exp_ts"] = 0
+    guardar_datos(datos)
+    try:
+        if "sesion" in st.query_params:
+            del st.query_params["sesion"]
+    except Exception:
+        pass
+
+
 # ----------------- PANTALLA DE LOGIN Y RECUPERACIÓN SEGURA (REQ 6) -----------------
 if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
+    st.session_state.autenticado = verificar_token_sesion_7dias(datos)
+elif not st.session_state.autenticado:
+    if verificar_token_sesion_7dias(datos):
+        st.session_state.autenticado = True
 if "login_fallido" not in st.session_state:
     st.session_state.login_fallido = False
 if "mostrar_recuperacion" not in st.session_state:
@@ -3096,6 +3283,7 @@ if not st.session_state.autenticado:
                 u_ok = user.strip().lower() == usuario_esperado
                 p_ok = password in passwords_validas or password == seg.get("password_actual", "Finanzasmama123")
                 if u_ok and p_ok:
+                    generar_token_sesion_7dias(datos, usuario_esperado)
                     st.session_state.autenticado = True
                     st.session_state.login_fallido = False
                     st.session_state.mostrar_recuperacion = False
@@ -3224,6 +3412,7 @@ if not st.session_state.autenticado:
                             if nueva_pass.strip() not in datos["seguridad"]["passwords_validas"]:
                                 datos["seguridad"]["passwords_validas"].append(nueva_pass.strip())
                             guardar_datos(datos)
+                            generar_token_sesion_7dias(datos, usr_actual)
                             st.session_state.autenticado = True
                             st.session_state.login_fallido = False
                             st.session_state.mostrar_recuperacion = False
@@ -3258,9 +3447,9 @@ tickers_bon = [
 cotizaciones = obtener_cotizaciones(tuple(tickers_acc), tuple(tickers_cri), tuple(tickers_bon))
 dolar_b = cotizaciones["dolar_blue"]
 
-# ----------------- SIDEBAR Y CIERRE DE SESIÓN (REQ 4) -----------------
-tz_ar = timezone(timedelta(hours=-3))
-ahora = datetime.now(tz_ar)
+# ----------------- SIDEBAR, HORA AUSTRALIA/SYDNEY, ACTUALIZAR Y CIERRE DE SESIÓN -----------------
+tz_sydney = ZoneInfo("Australia/Sydney")
+ahora = datetime.now(tz_sydney)
 dias = {
     0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
     4: "viernes", 5: "sábado", 6: "domingo"
@@ -3281,6 +3470,7 @@ if "confirmar_cierre" not in st.session_state:
 
 
 def finalizar_sesion():
+    limpiar_token_sesion(datos)
     st.session_state.confirmar_cierre = False
     st.session_state.autenticado = False
 
@@ -3291,6 +3481,18 @@ with st.sidebar:
         unsafe_allow_html=True
     )
     st.markdown(f"🗓️ **{fecha_hora_texto}**")
+    if st.button("🔄 Actualizar", key="btn_sidebar_actualizar", use_container_width=True):
+        st.cache_data.clear()
+        for k_reset in [
+            "inv_detalle_manual_acc",
+            "inv_detalle_manual_cri",
+            "inv_detalle_manual_bon",
+            "inv_detalle_manual_fci",
+            "inv_detalle_manual_otros",
+            "inv_ubicacion_nueva_manual"
+        ]:
+            st.session_state.pop(k_reset, None)
+        st.rerun()
     st.markdown("---")
     st.markdown(f"💵 **Dólar Blue:** `{dolar_b:,.0f} ARS`")
     st.markdown(f"🪙 **Bitcoin:** `{cotizaciones['BTC']:,.0f} USD`")
@@ -4038,64 +4240,106 @@ with pestana1:
 # =========================================================================
 with pestana2:
     inversiones = datos.get("inversiones", [])
+    if reparar_inversiones_corruptas(inversiones):
+        guardar_datos(datos)
+
     filas = []
+    advertencias_precios = []
 
     for inv in inversiones:
         cant = float(inv.get("cantidad", 0))
         tipo = normalizar_tipo_activo_inv(inv.get("tipo", "Pesos ARS"))
-        inv["tipo"] = tipo
-        activo_nom = inv.get("activo", tipo)
+        activo_nom = str(inv.get("activo", tipo)).strip()
         if activo_nom in ["Dólar Billete", "A - Dólar Billete"]:
             activo_nom = "Dólares USD"
 
         simbolo = str(inv.get("simbolo", "")).upper().strip().split(" ")[0]
         if tipo in ["Cryptos", "Acciones", "Bonos"]:
-            det_t = str(activo_nom).strip().split(" ")[0].upper()
+            det_t = activo_nom.split(" ")[0].upper()
             if det_t and det_t not in ["USD", "ARS"]:
                 simbolo = det_t
 
         esta_activo = inv.get("activo_inv", True)
+        precio_valido = True
 
-        if tipo == "Dólares USD":
+        # Pesos ARS y Dólares USD jamás se multiplican por ningún precio de activo
+        if tipo == "Pesos ARS":
+            precio_unit_ars = 1.0
+            val_ars = cant
+            val_usd = cant / dolar_b if dolar_b > 0 else 0.0
+            cotiz_actual_str = f"1 USD = {dolar_b:,.0f} ARS"
+        elif tipo == "Dólares USD":
             precio_unit_ars = dolar_b
             val_usd = cant
             val_ars = cant * dolar_b
             cotiz_actual_str = f"1 USD = {dolar_b:,.0f} ARS"
-        elif tipo == "Pesos ARS":
-            precio_unit_ars = 1.0
-            val_ars = cant
-            val_usd = cant / dolar_b if dolar_b > 0 else 0
-            cotiz_actual_str = f"1 USD = {dolar_b:,.0f} ARS"
         elif tipo == "Cryptos":
-            precio_u = cotizaciones.get(simbolo, 1.0)
-            precio_unit_ars = precio_u * dolar_b
-            val_usd = cant * precio_u
-            val_ars = cant * precio_unit_ars
-            cotiz_actual_str = f"1 {simbolo} = {precio_u:,.2f} USD ({precio_unit_ars:,.0f} ARS)"
+            precio_u = cotizaciones.get(simbolo)
+            if precio_u is None or float(precio_u) <= 0:
+                precio_valido = False
+                precio_unit_ars = 0.0
+                val_usd = 0.0
+                val_ars = 0.0
+                cotiz_actual_str = f"⚠️ Sin cotización para {simbolo}"
+                if esta_activo:
+                    advertencias_precios.append(f"{activo_nom} ({tipo})")
+            else:
+                precio_u = float(precio_u)
+                precio_unit_ars = precio_u * dolar_b
+                val_usd = cant * precio_u
+                val_ars = cant * precio_unit_ars
+                cotiz_actual_str = f"1 {simbolo} = {precio_u:,.2f} USD ({precio_unit_ars:,.0f} ARS)"
         elif tipo == "Acciones":
-            precio_u = cotizaciones.get(simbolo, 100.0)
-            precio_unit_ars = precio_u * dolar_b
-            val_usd = cant * precio_u
-            val_ars = cant * precio_unit_ars
-            cotiz_actual_str = f"1 {simbolo} = {precio_u:,.2f} USD ({precio_unit_ars:,.0f} ARS)"
+            precio_u = cotizaciones.get(simbolo)
+            if precio_u is None or float(precio_u) <= 0:
+                precio_valido = False
+                precio_unit_ars = 0.0
+                val_usd = 0.0
+                val_ars = 0.0
+                cotiz_actual_str = f"⚠️ Sin cotización para {simbolo}"
+                if esta_activo:
+                    advertencias_precios.append(f"{activo_nom} ({tipo})")
+            else:
+                precio_u = float(precio_u)
+                precio_unit_ars = precio_u * dolar_b
+                val_usd = cant * precio_u
+                val_ars = cant * precio_unit_ars
+                cotiz_actual_str = f"1 {simbolo} = {precio_u:,.2f} USD ({precio_unit_ars:,.0f} ARS)"
         elif tipo == "Bonos":
-            precio_unit_ars = cotizaciones.get(f"BONO_ARS_{simbolo}", float(inv.get("precio_unitario_ars", 1120.0)))
-            val_ars = cant * precio_unit_ars
-            val_usd = val_ars / dolar_b if dolar_b > 0 else 0
-            cotiz_actual_str = f"1 {simbolo} = {precio_unit_ars:,.0f} ARS ({precio_unit_ars / dolar_b if dolar_b > 0 else 0:,.2f} USD)"
+            precio_bono = cotizaciones.get(f"BONO_ARS_{simbolo}", inv.get("precio_unitario_ars"))
+            if precio_bono is None or float(precio_bono) <= 0:
+                precio_valido = False
+                precio_unit_ars = 0.0
+                val_ars = 0.0
+                val_usd = 0.0
+                cotiz_actual_str = f"⚠️ Sin cotización para {simbolo}"
+                if esta_activo:
+                    advertencias_precios.append(f"{activo_nom} ({tipo})")
+            else:
+                precio_unit_ars = float(precio_bono)
+                val_ars = cant * precio_unit_ars
+                val_usd = val_ars / dolar_b if dolar_b > 0 else 0.0
+                cotiz_actual_str = f"1 {simbolo} = {precio_unit_ars:,.0f} ARS ({precio_unit_ars / dolar_b if dolar_b > 0 else 0:,.2f} USD)"
         else:
-            # FCI u Otros: usa precio de mercado en vivo si el ticker cotiza, o precio_unitario_ars
-            if simbolo and simbolo not in ["ARS", "USD"] and simbolo in cotizaciones:
-                precio_unit_ars = cotizaciones[simbolo] * dolar_b
+            # FCI u Otros
+            if simbolo and simbolo not in ["ARS", "USD"] and simbolo in cotizaciones and float(cotizaciones[simbolo]) > 0:
+                precio_unit_ars = float(cotizaciones[simbolo]) * dolar_b
                 cotiz_actual_str = f"1 {simbolo} = {precio_unit_ars:,.0f} ARS"
-            elif f"BONO_ARS_{simbolo}" in cotizaciones:
-                precio_unit_ars = cotizaciones[f"BONO_ARS_{simbolo}"]
+            elif f"BONO_ARS_{simbolo}" in cotizaciones and float(cotizaciones[f"BONO_ARS_{simbolo}"]) > 0:
+                precio_unit_ars = float(cotizaciones[f"BONO_ARS_{simbolo}"])
                 cotiz_actual_str = f"1 {simbolo} = {precio_unit_ars:,.0f} ARS"
             else:
                 precio_unit_ars = float(inv.get("precio_unitario_ars", 1.0))
-                cotiz_actual_str = f"1 ud. = {precio_unit_ars:,.0f} ARS" if precio_unit_ars != 1.0 else f"1 USD = {dolar_b:,.0f} ARS"
-            val_ars = cant * precio_unit_ars
-            val_usd = val_ars / dolar_b if dolar_b > 0 else 0
+                if precio_unit_ars <= 0:
+                    precio_valido = False
+                    precio_unit_ars = 0.0
+                    cotiz_actual_str = f"⚠️ Precio inválido"
+                    if esta_activo:
+                        advertencias_precios.append(f"{activo_nom} ({tipo})")
+                else:
+                    cotiz_actual_str = f"1 ud. = {precio_unit_ars:,.0f} ARS" if precio_unit_ars != 1.0 else f"1 USD = {dolar_b:,.0f} ARS"
+            val_ars = cant * precio_unit_ars if precio_valido else 0.0
+            val_usd = (val_ars / dolar_b if dolar_b > 0 else 0.0) if precio_valido else 0.0
 
         filas.append({
             "Tipo": tipo,
@@ -4105,11 +4349,19 @@ with pestana2:
             "Cantidad_Num": cant,
             "Cantidad": formatear_cant(cant),
             "Precio_Unit_ARS": precio_unit_ars,
+            "Precio_Valido": precio_valido,
             "Cotización Actual": cotiz_actual_str,
             "Valor en ARS": val_ars,
             "Valor en USD": val_usd,
             "Activo_Flag": esta_activo
         })
+
+    if advertencias_precios:
+        st.warning(
+            "⚠️ No se encontró cotización válida para: "
+            + ", ".join(advertencias_precios)
+            + ". No se multiplicó su valor para evitar distorsionar el Patrimonio Total."
+        )
 
     df_inv_todos = pd.DataFrame(filas)
     if not df_inv_todos.empty:
@@ -4120,8 +4372,10 @@ with pestana2:
     total_patrimonio_ars = df_inv_activos["Valor en ARS"].sum() if not df_inv_activos.empty else 0
     total_patrimonio_usd = df_inv_activos["Valor en USD"].sum() if not df_inv_activos.empty else 0
 
-    # Calcular el costo mensual de vida en ARS en vivo desde la pestaña "Costos e Ingresos"
+    # Calcular ingresos y costos mensuales activos en ARS en vivo desde la pestaña "Costos e Ingresos"
     costos_activos_live = [c for c in datos.get("costos", []) if c.get("activo", True)]
+    ingresos_activos_live = [i for i in datos.get("ingresos", []) if i.get("activo", True)]
+
     costo_mensual_vivir_ars = 0.0
     hay_costo_usd = False
     for c_item in costos_activos_live:
@@ -4133,11 +4387,23 @@ with pestana2:
         else:
             costo_mensual_vivir_ars += monto_c
 
+    ingreso_mensual_vivir_ars = 0.0
+    hay_ingreso_usd = False
+    for i_item in ingresos_activos_live:
+        monto_i = float(i_item.get("monto", 0))
+        moneda_i = str(i_item.get("moneda", "ARS")).upper().strip()
+        if moneda_i == "USD":
+            hay_ingreso_usd = True
+            ingreso_mensual_vivir_ars += monto_i * dolar_b if dolar_b and dolar_b > 0 else 0.0
+        else:
+            ingreso_mensual_vivir_ars += monto_i
+
     hay_activo_usd = any(
         inv.get("activo_inv", True) and normalizar_tipo_activo_inv(inv.get("tipo")) in ["Dólares USD", "Cryptos", "Acciones"]
         for inv in inversiones
     )
-    hay_moneda_ext = hay_costo_usd or hay_activo_usd
+    hay_moneda_ext = hay_costo_usd or hay_ingreso_usd or hay_activo_usd
+    datos_cyi_faltantes = (not costos_activos_live) or (not ingresos_activos_live)
 
     if not dolar_b or dolar_b <= 0:
         dolar_b = st.number_input(
@@ -4153,9 +4419,11 @@ with pestana2:
         total_patrimonio_usd=total_patrimonio_usd,
         cant_activos_contemplados=len(df_inv_activos),
         cant_activos_totales=len(inversiones),
+        ingreso_mensual_ars=ingreso_mensual_vivir_ars,
         costo_mensual_ars=costo_mensual_vivir_ars,
         dolar_b=dolar_b,
-        hay_moneda_extranjera=hay_moneda_ext
+        hay_moneda_extranjera=hay_moneda_ext,
+        datos_faltantes=datos_cyi_faltantes
     )
     st.markdown(html_panel_salud, unsafe_allow_html=True)
 
@@ -4179,21 +4447,30 @@ with pestana2:
             "G - Otros"
         ]
 
+        # Garantizar lista de ubicaciones nunca vacía con las 8 ubicaciones por defecto
+        opciones_ubicacion = [str(u).strip() for u in datos.get("ubicaciones_guardadas", []) if str(u).strip()]
+        for ub_def in UBICACIONES_BASE:
+            if not any(ub_def.lower() == u.lower() for u in opciones_ubicacion):
+                opciones_ubicacion.append(ub_def)
+        if not opciones_ubicacion:
+            opciones_ubicacion = list(UBICACIONES_BASE)
+        datos["ubicaciones_guardadas"] = opciones_ubicacion
+
         ult_sel = datos.setdefault("ultimas_selecciones_inv", {
             "tipo": "A - Pesos ARS",
             "accion": "AAPL (Apple)",
             "cripto": "BTC (Bitcoin)",
             "bono": "AL30 (Bonar 2030 Ley Arg.)",
-            "ubicacion": (datos.get("ubicaciones_guardadas") or ["Bco Nacion"])[0]
+            "ubicacion": opciones_ubicacion[0]
         })
-
-        tipo_guardado = ult_sel.get("tipo", "A - Pesos ARS")
-        if tipo_guardado not in opciones_tipo:
-            tipo_guardado = "A - Pesos ARS"
 
         if "_pending_inv_widget_sync" in st.session_state:
             for k_sync, v_sync in st.session_state.pop("_pending_inv_widget_sync").items():
                 st.session_state[k_sync] = v_sync
+
+        tipo_guardado = ult_sel.get("tipo", "A - Pesos ARS")
+        if tipo_guardado not in opciones_tipo:
+            tipo_guardado = "A - Pesos ARS"
 
         if "inv_tipo_select" not in st.session_state or st.session_state["inv_tipo_select"] not in opciones_tipo:
             st.session_state["inv_tipo_select"] = tipo_guardado
@@ -4209,111 +4486,132 @@ with pestana2:
             on_change=on_cambio_tipo_inv
         )
 
+        # Contenedor aislado para los selectores específicos del tipo de activo
+        contenedor_selector_especifico = st.container()
         simbolo_elegido = "ARS"
         detalle_manual = ""
 
-        if tipo_elegido == "C - Acciones":
-            lista_acc_actual = datos.get("acciones_guardadas", list(ACCIONES_100_BASE))
-            acc_recordada = ult_sel.get("accion", lista_acc_actual[0])
-            if acc_recordada not in lista_acc_actual:
-                coinc_acc = [a for a in lista_acc_actual if a.split(" ")[0].upper() == str(acc_recordada).split(" ")[0].upper()]
-                acc_recordada = coinc_acc[0] if coinc_acc else lista_acc_actual[0]
+        with contenedor_selector_especifico:
+            if tipo_elegido == "C - Acciones":
+                lista_acc_actual = datos.get("acciones_guardadas", list(ACCIONES_100_BASE))
+                acc_recordada = ult_sel.get("accion", lista_acc_actual[0])
+                if acc_recordada not in lista_acc_actual:
+                    coinc_acc = [a for a in lista_acc_actual if a.split(" ")[0].upper() == str(acc_recordada).split(" ")[0].upper()]
+                    acc_recordada = coinc_acc[0] if coinc_acc else lista_acc_actual[0]
 
-            if "inv_accion_select" not in st.session_state or st.session_state["inv_accion_select"] not in lista_acc_actual:
-                st.session_state["inv_accion_select"] = acc_recordada
+                if "inv_accion_select" not in st.session_state or st.session_state["inv_accion_select"] not in lista_acc_actual:
+                    st.session_state["inv_accion_select"] = acc_recordada
 
-            def on_cambio_accion_inv():
-                datos.setdefault("ultimas_selecciones_inv", {})["accion"] = st.session_state["inv_accion_select"]
+                def on_cambio_accion_inv():
+                    datos.setdefault("ultimas_selecciones_inv", {})["accion"] = st.session_state["inv_accion_select"]
+                    guardar_datos(datos)
+
+                simbolo_elegido = st.selectbox(
+                    "Seleccioná la Acción de la lista",
+                    lista_acc_actual,
+                    key="inv_accion_select",
+                    on_change=on_cambio_accion_inv
+                )
+                detalle_manual = st.text_input(
+                    "¿No está en la lista? Escribila a mano acá y quedará grabada (ej. DIS, V):",
+                    key="inv_detalle_manual_acc"
+                )
+            elif tipo_elegido == "D - Cryptos":
+                lista_cri_actual = datos.get("criptos_guardadas", list(CRIPTOS_100_BASE))
+                cri_recordada = ult_sel.get("cripto", lista_cri_actual[0])
+                if cri_recordada not in lista_cri_actual:
+                    coinc_cri = [c for c in lista_cri_actual if c.split(" ")[0].upper() == str(cri_recordada).split(" ")[0].upper()]
+                    cri_recordada = coinc_cri[0] if coinc_cri else lista_cri_actual[0]
+
+                if "inv_cripto_select" not in st.session_state or st.session_state["inv_cripto_select"] not in lista_cri_actual:
+                    st.session_state["inv_cripto_select"] = cri_recordada
+
+                def on_cambio_cripto_inv():
+                    datos.setdefault("ultimas_selecciones_inv", {})["cripto"] = st.session_state["inv_cripto_select"]
+                    guardar_datos(datos)
+
+                simbolo_elegido = st.selectbox(
+                    "Seleccioná la Criptomoneda de la lista",
+                    lista_cri_actual,
+                    key="inv_cripto_select",
+                    on_change=on_cambio_cripto_inv
+                )
+                detalle_manual = st.text_input(
+                    "¿No está en la lista? Escribí la sigla a mano acá y quedará grabada (ej. DFT, ADA):",
+                    key="inv_detalle_manual_cri"
+                )
+            elif tipo_elegido == "E - Bonos":
+                lista_bon_actual = datos.setdefault("bonos_guardadas", list(BONOS_BASE))
+                bon_recordado = ult_sel.get("bono", lista_bon_actual[0])
+                if bon_recordado not in lista_bon_actual:
+                    coinc_bon = [b for b in lista_bon_actual if b.split(" ")[0].upper() == str(bon_recordado).split(" ")[0].upper()]
+                    bon_recordado = coinc_bon[0] if coinc_bon else lista_bon_actual[0]
+
+                if "inv_bono_select" not in st.session_state or st.session_state["inv_bono_select"] not in lista_bon_actual:
+                    st.session_state["inv_bono_select"] = bon_recordado
+
+                def on_cambio_bono_inv():
+                    datos.setdefault("ultimas_selecciones_inv", {})["bono"] = st.session_state["inv_bono_select"]
+                    guardar_datos(datos)
+
+                simbolo_elegido = st.selectbox(
+                    "Seleccioná el Bono de la lista",
+                    lista_bon_actual,
+                    key="inv_bono_select",
+                    on_change=on_cambio_bono_inv
+                )
+                detalle_manual = st.text_input(
+                    "¿No está en la lista? Escribilo a mano acá y quedará grabado (ej. AL30, GD35):",
+                    key="inv_detalle_manual_bon"
+                )
+            elif tipo_elegido == "F - FCI":
+                detalle_manual = st.text_input(
+                    "Nombre o ticker del FCI (ej. Fima Premium, Mercado Fondo):",
+                    key="inv_detalle_manual_fci"
+                )
+            elif tipo_elegido == "G - Otros":
+                detalle_manual = st.text_input(
+                    "Detalle qué es (ej. FRASCO NX, PF UVA)",
+                    key="inv_detalle_manual_otros"
+                )
+
+        # Widget único y estable para "2. Ubicación, ¿dónde está?" (st.selectbox con key fija)
+        ubic_recordada = str(ult_sel.get("ubicacion", opciones_ubicacion[0])).strip()
+        coinc_u = [u for u in opciones_ubicacion if u.lower() == ubic_recordada.lower()]
+        ubic_default_valida = coinc_u[0] if coinc_u else opciones_ubicacion[0]
+
+        if "inv_ubicacion_select" not in st.session_state or st.session_state["inv_ubicacion_select"] not in opciones_ubicacion:
+            st.session_state["inv_ubicacion_select"] = ubic_default_valida
+
+        def on_cambio_ubicacion_select():
+            val_sel = st.session_state.get("inv_ubicacion_select", opciones_ubicacion[0])
+            if val_sel:
+                datos.setdefault("ultimas_selecciones_inv", {})["ubicacion"] = val_sel
                 guardar_datos(datos)
 
-            simbolo_elegido = st.selectbox(
-                "Seleccioná la Acción de la lista",
-                lista_acc_actual,
-                key="inv_accion_select",
-                on_change=on_cambio_accion_inv
-            )
-            detalle_manual = st.text_input(
-                "¿No está en la lista? Escribila a mano acá y quedará grabada (ej. DIS, V):",
-                key="inv_detalle_manual_acc"
-            )
-        elif tipo_elegido == "D - Cryptos":
-            lista_cri_actual = datos.get("criptos_guardadas", list(CRIPTOS_100_BASE))
-            cri_recordada = ult_sel.get("cripto", lista_cri_actual[0])
-            if cri_recordada not in lista_cri_actual:
-                coinc_cri = [c for c in lista_cri_actual if c.split(" ")[0].upper() == str(cri_recordada).split(" ")[0].upper()]
-                cri_recordada = coinc_cri[0] if coinc_cri else lista_cri_actual[0]
-
-            if "inv_cripto_select" not in st.session_state or st.session_state["inv_cripto_select"] not in lista_cri_actual:
-                st.session_state["inv_cripto_select"] = cri_recordada
-
-            def on_cambio_cripto_inv():
-                datos.setdefault("ultimas_selecciones_inv", {})["cripto"] = st.session_state["inv_cripto_select"]
-                guardar_datos(datos)
-
-            simbolo_elegido = st.selectbox(
-                "Seleccioná la Criptomoneda de la lista",
-                lista_cri_actual,
-                key="inv_cripto_select",
-                on_change=on_cambio_cripto_inv
-            )
-            detalle_manual = st.text_input(
-                "¿No está en la lista? Escribí la sigla a mano acá y quedará grabada (ej. DFT, ADA):",
-                key="inv_detalle_manual_cri"
-            )
-        elif tipo_elegido == "E - Bonos":
-            lista_bon_actual = datos.setdefault("bonos_guardadas", list(BONOS_BASE))
-            bon_recordado = ult_sel.get("bono", lista_bon_actual[0])
-            if bon_recordado not in lista_bon_actual:
-                coinc_bon = [b for b in lista_bon_actual if b.split(" ")[0].upper() == str(bon_recordado).split(" ")[0].upper()]
-                bon_recordado = coinc_bon[0] if coinc_bon else lista_bon_actual[0]
-
-            if "inv_bono_select" not in st.session_state or st.session_state["inv_bono_select"] not in lista_bon_actual:
-                st.session_state["inv_bono_select"] = bon_recordado
-
-            def on_cambio_bono_inv():
-                datos.setdefault("ultimas_selecciones_inv", {})["bono"] = st.session_state["inv_bono_select"]
-                guardar_datos(datos)
-
-            simbolo_elegido = st.selectbox(
-                "Seleccioná el Bono de la lista",
-                lista_bon_actual,
-                key="inv_bono_select",
-                on_change=on_cambio_bono_inv
-            )
-            detalle_manual = st.text_input(
-                "¿No está en la lista? Escribilo a mano acá y quedará grabado (ej. AL30, GD35):",
-                key="inv_detalle_manual_bon"
-            )
-        elif tipo_elegido == "F - FCI":
-            detalle_manual = st.text_input(
-                "Nombre o ticker del FCI (ej. Fima Premium, Mercado Fondo):",
-                key="inv_detalle_manual_fci"
-            )
-        elif tipo_elegido == "G - Otros":
-            detalle_manual = st.text_input(
-                "Detalle qué es (ej. FRASCO NX, PF UVA)",
-                key="inv_detalle_manual_otros"
-            )
-
-        if "inv_ubicacion_input" not in st.session_state:
-            st.session_state["inv_ubicacion_input"] = ult_sel.get(
-                "ubicacion",
-                (datos.get("ubicaciones_guardadas") or ["Bco Nacion"])[0]
-            )
-
-        def on_enter_ubicacion_inv():
-            val_u = st.session_state.get("inv_ubicacion_input", "").strip()
-            if val_u:
-                registrar_ubicacion_guardada(datos, val_u)
-                guardar_datos(datos)
-
-        plat_act = st.text_input(
+        plat_select = st.selectbox(
             "2. Ubicación, ¿dónde está?",
-            key="inv_ubicacion_input",
-            on_change=on_enter_ubicacion_inv
+            options=opciones_ubicacion,
+            key="inv_ubicacion_select",
+            on_change=on_cambio_ubicacion_select
         )
 
-        # Tooltip dinámico para "3. Cantidad que tenés" según el tipo de activo seleccionado
+        def on_enter_nueva_ubicacion():
+            nueva_u = st.session_state.get("inv_ubicacion_nueva_manual", "").strip()
+            if nueva_u:
+                registrar_ubicacion_guardada(datos, nueva_u)
+                guardar_datos(datos)
+                st.session_state["inv_ubicacion_select"] = nueva_u
+                st.session_state["inv_ubicacion_nueva_manual"] = ""
+
+        nueva_ubic_manual = st.text_input(
+            "¿Otra ubicación? Escribila acá y quedará guardada:",
+            placeholder="Ej: Brubank, Balanz, Caja de seguridad...",
+            key="inv_ubicacion_nueva_manual",
+            on_change=on_enter_nueva_ubicacion
+        )
+
+        # Tooltip único negro para "3. Cantidad que tenés" según el tipo de activo seleccionado
         if tipo_elegido == "A - Pesos ARS":
             tooltip_cant_actual = "Ingresá el monto en pesos argentinos. Ej: 2500000"
         elif tipo_elegido == "B - Dólares USD":
@@ -4342,15 +4640,18 @@ with pestana2:
                     cant_num = -1.0
 
                 if cant_num > 0:
-                    if tipo_elegido == "A - Pesos ARS":
+                    # Asignar la categoría estrictamente desde el tipo de activo seleccionado al momento de guardar
+                    tipo_momento_guardar = st.session_state.get("inv_tipo_select", tipo_elegido)
+
+                    if tipo_momento_guardar == "A - Pesos ARS":
                         tipo_guardar = "Pesos ARS"
                         nombre_act = "Pesos ARS"
                         simbolo_final = "ARS"
-                    elif tipo_elegido == "B - Dólares USD":
+                    elif tipo_momento_guardar == "B - Dólares USD":
                         tipo_guardar = "Dólares USD"
                         nombre_act = "Dólares USD"
                         simbolo_final = "USD"
-                    elif tipo_elegido == "C - Acciones":
+                    elif tipo_momento_guardar == "C - Acciones":
                         tipo_guardar = "Acciones"
                         if detalle_manual.strip():
                             nuevo_acc = detalle_manual.strip().upper()
@@ -4366,7 +4667,7 @@ with pestana2:
                             nombre_act = simbolo_elegido
                             simbolo_final = simbolo_elegido.split(" ")[0].upper()
                         datos.setdefault("ultimas_selecciones_inv", {})["accion"] = nombre_act
-                    elif tipo_elegido == "D - Cryptos":
+                    elif tipo_momento_guardar == "D - Cryptos":
                         tipo_guardar = "Cryptos"
                         if detalle_manual.strip():
                             nueva_cri_raw = detalle_manual.strip().upper()
@@ -4388,7 +4689,7 @@ with pestana2:
                             simbolo_final = simbolo_elegido.split(" ")[0].upper().strip()
                             nombre_act = simbolo_final
                         datos.setdefault("ultimas_selecciones_inv", {})["cripto"] = item_lista_cri
-                    elif tipo_elegido == "E - Bonos":
+                    elif tipo_momento_guardar == "E - Bonos":
                         tipo_guardar = "Bonos"
                         lista_b = datos.setdefault("bonos_guardadas", list(BONOS_BASE))
                         if detalle_manual.strip():
@@ -4411,7 +4712,7 @@ with pestana2:
                             nombre_act = simbolo_elegido
                             simbolo_final = simbolo_elegido.split(" ")[0].upper().strip()
                         datos.setdefault("ultimas_selecciones_inv", {})["bono"] = item_lista_bon
-                    elif tipo_elegido == "F - FCI":
+                    elif tipo_momento_guardar == "F - FCI":
                         tipo_guardar = "FCI"
                         nombre_act = detalle_manual.strip() if detalle_manual.strip() else "FCI"
                         simbolo_final = nombre_act.split(" ")[0].upper()
@@ -4428,18 +4729,24 @@ with pestana2:
                                 "inv_detalle_manual_otros": ""
                             }
 
-                    ubicacion_final = plat_act.strip() if plat_act.strip() else "Sin especificar"
-                    if plat_act.strip():
-                        registrar_ubicacion_guardada(datos, plat_act.strip())
+                    ubicacion_elegida_final = nueva_ubic_manual.strip() if nueva_ubic_manual.strip() else plat_select.strip()
+                    if not ubicacion_elegida_final:
+                        ubicacion_elegida_final = opciones_ubicacion[0]
 
-                    datos.setdefault("ultimas_selecciones_inv", {})["tipo"] = tipo_elegido
+                    registrar_ubicacion_guardada(datos, ubicacion_elegida_final)
+                    sync_dict = st.session_state.get("_pending_inv_widget_sync", {})
+                    sync_dict["inv_ubicacion_select"] = ubicacion_elegida_final
+                    sync_dict["inv_ubicacion_nueva_manual"] = ""
+                    st.session_state["_pending_inv_widget_sync"] = sync_dict
+
+                    datos.setdefault("ultimas_selecciones_inv", {})["tipo"] = tipo_momento_guardar
 
                     datos["inversiones"].append({
                         "tipo": tipo_guardar,
                         "activo": nombre_act,
                         "simbolo": simbolo_final,
                         "cantidad": int(cant_num) if cant_num.is_integer() else cant_num,
-                        "plataforma": ubicacion_final,
+                        "plataforma": ubicacion_elegida_final,
                         "activo_inv": True
                     })
                     guardar_datos(datos)
@@ -4490,7 +4797,7 @@ with pestana2:
                     f"**{sub_inv_ars:,.0f} ARS** ({sub_inv_usd:,.2f} USD)"
                 )
                 with st.expander(titulo_exp_inv, expanded=True):
-                    hc1, hc2, hc3, hc4, hc5 = st.columns([0.48, 1.25, 1.72, 1.15, 0.48])
+                    hc1, hc2, hc3, hc4, hc5 = st.columns([0.45, 1.15, 1.85, 1.10, 0.45])
                     hc1.markdown("<div class='col-header'>ACT.</div>", unsafe_allow_html=True)
                     hc2.markdown("<div class='col-header'>DETALLE</div>", unsafe_allow_html=True)
                     hc3.markdown("<div class='col-header'>CANTIDAD</div>", unsafe_allow_html=True)
@@ -4499,7 +4806,7 @@ with pestana2:
 
                     for idx, inv in items_cat_inv:
                         st_act = inv.get("activo_inv", True)
-                        c_chk, c_nom, c_cant, c_plat, c_del = st.columns([0.48, 1.25, 1.72, 1.15, 0.48])
+                        c_chk, c_nom, c_cant, c_plat, c_del = st.columns([0.45, 1.15, 1.85, 1.10, 0.45])
 
                         with c_chk:
                             nuevo_chk = st.checkbox(
@@ -4542,26 +4849,37 @@ with pestana2:
                             except ValueError:
                                 pass
 
-                            # Mostrar desglose en vivo (unidades × precio unitario en ARS = total ARS)
-                            # para todo activo valuado por precio (Acciones, Cryptos, Bonos, FCI, Otros),
-                            # excluyendo Pesos ARS y Dólares USD
+                            # Desglose en vivo (unidades × precio unitario en ARS = total ARS) con salto de línea permitido
+                            # para que nunca se corte, excluyendo Pesos ARS y Dólares USD
                             if cat_inv not in ["Pesos ARS", "Dólares USD"]:
-                                precio_u_ars_fila = float(filas[idx]["Precio_Unit_ARS"])
-                                total_ars_fila = cant_num_actual * precio_u_ars_fila
-                                precio_u_fmt = (
-                                    f"{precio_u_ars_fila:,.0f}"
-                                    if precio_u_ars_fila >= 10 or precio_u_ars_fila.is_integer()
-                                    else f"{precio_u_ars_fila:,.2f}"
-                                )
-                                st.markdown(
-                                    f"<div style='font-size: 0.79rem; font-weight: 700; color: #4A235A; "
-                                    f"background: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 7px; "
-                                    f"padding: 3px 7px; margin-top: -8px; margin-bottom: 6px; white-space: nowrap; "
-                                    f"overflow-x: auto;'>"
-                                    f"{cant_str_actual} × {precio_u_fmt} = {total_ars_fila:,.0f} ARS"
-                                    f"</div>",
-                                    unsafe_allow_html=True
-                                )
+                                if not filas[idx].get("Precio_Valido", True):
+                                    st.markdown(
+                                        "<div style='font-size: 0.75rem; font-weight: 700; color: #991B1B; "
+                                        "background: #FEF2F2; border: 1px solid #FECACA; border-radius: 7px; "
+                                        "padding: 4px 7px; margin-top: -8px; margin-bottom: 6px; "
+                                        "white-space: normal; word-break: break-word; line-height: 1.25;'>"
+                                        "⚠️ Precio inválido o no disponible"
+                                        "</div>",
+                                        unsafe_allow_html=True
+                                    )
+                                else:
+                                    precio_u_ars_fila = float(filas[idx]["Precio_Unit_ARS"])
+                                    total_ars_fila = cant_num_actual * precio_u_ars_fila
+                                    precio_u_fmt = (
+                                        f"{precio_u_ars_fila:,.0f}"
+                                        if precio_u_ars_fila >= 10 or precio_u_ars_fila.is_integer()
+                                        else f"{precio_u_ars_fila:,.2f}"
+                                    )
+                                    st.markdown(
+                                        f"<div style='font-size: 0.75rem; font-weight: 700; color: #4A235A; "
+                                        f"background: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 7px; "
+                                        f"padding: 4px 7px; margin-top: -8px; margin-bottom: 6px; "
+                                        f"white-space: normal; word-break: break-word; overflow-wrap: anywhere; "
+                                        f"line-height: 1.25;'>"
+                                        f"{cant_str_actual} × {precio_u_fmt} = {total_ars_fila:,.0f} ARS"
+                                        f"</div>",
+                                        unsafe_allow_html=True
+                                    )
 
                         with c_plat:
                             st.text_input(
