@@ -1008,7 +1008,6 @@ def construir_html_panel_patrimonio(
 ):
     tasa_invalida = hay_moneda_extranjera and (dolar_b is None or float(dolar_b) <= 0)
     es_crecimiento = False
-    linea_ahorro_positivo_html = ""
 
     if tasa_invalida:
         score = 0.5
@@ -1028,13 +1027,6 @@ def construir_html_panel_patrimonio(
         elif monthly_saving > 0:
             score = 1.0
             es_crecimiento = True
-            linea_ahorro_positivo_html = (
-                f'<div style="color: #15803D; background: #DCFCE7; border: 1px solid #86EFAC; '
-                f'border-radius: 8px; padding: 2px 9px; font-size: 0.86rem; font-weight: 800; '
-                f'margin-top: 4px; display: inline-block;">'
-                f'Ahorro mensual: +{monthly_saving:,.0f} ARS'
-                f'</div>'
-            )
             mensaje_salud = (
                 f"Estamos muy bien financieramente: ahorrás {monthly_saving:,.0f} ARS por mes y tu patrimonio crece."
             )
@@ -1217,7 +1209,6 @@ def construir_html_panel_patrimonio(
         '<div class="kpi-title" style="font-size: 1.05rem; color: #1F2937; margin-bottom: 1px;">Patrimonio Total</div>',
         f'<div class="kpi-value" style="font-size: 1.72rem; color: #111827; line-height: 1.12;">{total_patrimonio_ars:,.0f} ARS</div>',
         f'<div class="kpi-usd" style="font-size: 0.96rem; color: #1F2937; background: rgba(255,255,255,0.92); margin-top: 3px; padding: 2px 9px;">{total_patrimonio_usd:,.2f} USD</div>',
-        linea_ahorro_positivo_html,
         f'<div class="jardin-status-box" style="background: {badge_bg}; color: {badge_text}; border-color: {border_col};">',
         f'<div style="font-size: 0.84rem; font-weight: 800; line-height: 1.25;">{mensaje_salud}</div>',
         '<div class="jardin-health-bar-track">',
